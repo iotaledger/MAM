@@ -28,3 +28,23 @@ key.
 
 ## I want more information
 More will come in time.
+
+## build
+
+It is suggested to use rust nightly. To build the project for release (optimized), run
+
+```
+cargo build --all --release
+```
+
+To build javascript (asm or wasm), follow instructions from [here](http://www.hellorust.com/emscripten/), and then
+
+```
+cd bindings
+# and then
+cargo build --release --target wasm32-unknown-emscripten
+# or
+cargo build --release --target asmjs-unknown-emscriptenw
+```
+
+The compiled output is found in the `target` directory.
