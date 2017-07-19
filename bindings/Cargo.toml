@@ -25,10 +25,10 @@ iota-mam = { path = "../mam" }
 cty = { git = "https://github.com/japaric/cty.git" }
 
 [dependencies.iota-trytes]
-git = "https://github.com/paulhandy/iota.rs"
+git = "https://github.com/iotaledger/iota.rs"
 [dependencies.iota-curl]
-git = "https://github.com/paulhandy/iota.rs"
+git = "https://github.com/iotaledger/iota.rs"
 iota-curl-cpu = { path = "../curl-cpu" }
 [dependencies.iota-curl-cpu]
-git = "https://github.com/paulhandy/iota.rs"
+git = "https://github.com/iotaledger/iota.rs"
 

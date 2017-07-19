@@ -7,15 +7,15 @@ keywords = ["no_std"]
 [dependencies]
 iota-merkle = { path = "../merkle" }
 [dependencies.iota-curl-cpu]
-git = "https://github.com/paulhandy/iota.rs"
+git = "https://github.com/iotaledger/iota.rs"
 [dependencies.iota-curl]
-git = "https://github.com/paulhandy/iota.rs"
+git = "https://github.com/iotaledger/iota.rs"
 [dependencies.iota-sign]
-git = "https://github.com/paulhandy/iota.rs"
+git = "https://github.com/iotaledger/iota.rs"
 [dependencies.iota-tmath]
-git = "https://github.com/paulhandy/iota.rs"
+git = "https://github.com/iotaledger/iota.rs"
 [dependencies.iota-trytes]
-git = "https://github.com/paulhandy/iota.rs"
+git = "https://github.com/iotaledger/iota.rs"
 
 [features]
 default = [ ]
