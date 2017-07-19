@@ -1,17 +1,9 @@
 use alloc::Vec;
-use alloc::string::*;
 use trytes::constants::*;
 use trytes::types::*;
-use trytes::util::*;
 use trytes::num;
 
-const MAX_ENCODED_VAL: Trit = 3;
 const ENCODER_MASK: isize = 7;
-
-enum PascalIter {
-    Reading,
-    Encoding,
-}
 
 pub fn decode(input: &IntoTrits<Trit>) -> (usize, usize) {
     let mut positive: Vec<Trit> = Vec::with_capacity(TRITS_PER_TRYTE);

@@ -66,7 +66,7 @@ where
     C: Curl<Trit>,
 {
 
-    let mut length;
+    let length;
     let trits: Vec<Trit> = payload.trits();
     let mut payload_iter = trits.iter();
     let (message_length, message_length_end) = pascal::decode(payload);

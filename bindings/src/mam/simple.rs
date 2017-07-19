@@ -57,7 +57,6 @@ pub fn mam_parse(c_payload: *const c_char, c_root: *const c_char, index: usize) 
     let root: Vec<Trit> = root_str.trits();
 
     let result = parse::<CpuCurl<Trit>>(&payload, &root, index);
-    //if result.is_ok() {
     let (message, next_root) = result.ok().unwrap();
     let out_box = {
         let mut out_str = trits_to_string(&message).unwrap();

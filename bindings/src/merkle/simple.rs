@@ -3,7 +3,6 @@ use alloc::boxed::Box;
 use alloc::Vec;
 use alloc::string::String;
 use iota_trytes::*;
-//use iota_curl_cpu::*;
 use iota_merkle::*;
 use util::c_str_to_static_slice;
 
@@ -15,7 +14,7 @@ pub fn merkle_keys(c_seed: *const c_char, start: usize, count: usize, security: 
     let keys = keys(&seed, start, count, security);
 
     let out_str = {
-        let mut s = keys.iter().fold(String::new(), |mut acc, key| {
+        let s = keys.iter().fold(String::new(), |mut acc, key| {
             acc.push_str(trits_to_string(key.trits().as_slice()).unwrap().as_str());
             acc.push('\n');
             acc
