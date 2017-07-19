@@ -1,0 +1,22 @@
+[package]
+name = "iota-mam"
+version = "0.1.0"
+authors = ["Paul D Handy <paul.d.handy@gmail.com>"]
+keywords = ["no_std"]
+
+[dependencies]
+iota-merkle = { path = "../merkle" }
+[dependencies.iota-curl-cpu]
+git = "https://github.com/paulhandy/iota.rs"
+[dependencies.iota-curl]
+git = "https://github.com/paulhandy/iota.rs"
+[dependencies.iota-sign]
+git = "https://github.com/paulhandy/iota.rs"
+[dependencies.iota-tmath]
+git = "https://github.com/paulhandy/iota.rs"
+[dependencies.iota-trytes]
+git = "https://github.com/paulhandy/iota.rs"
+
+[features]
+default = [ ]
+

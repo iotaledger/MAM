@@ -1,0 +1,34 @@
+[package]
+name = "iota-mam-bindings"
+version = "0.1.0"
+authors = ["Paul D Handy <paul.d.handy@gmail.com>"]
+keywords = ["no_std"]
+
+[lib]
+path = "src/lib.rs"
+test = true
+doc = true
+
+[[bin]]
+name = "iota-mam"
+path = "src/main.rs"
+doc = false
+test = false
+
+[features]
+default = []
+
+[dependencies]
+iota-merkle = { path = "../merkle" }
+iota-mam = { path = "../mam" }
+
+cty = { git = "https://github.com/japaric/cty.git" }
+
+[dependencies.iota-trytes]
+git = "https://github.com/paulhandy/iota.rs"
+[dependencies.iota-curl]
+git = "https://github.com/paulhandy/iota.rs"
+iota-curl-cpu = { path = "../curl-cpu" }
+[dependencies.iota-curl-cpu]
+git = "https://github.com/paulhandy/iota.rs"
+
