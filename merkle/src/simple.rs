@@ -6,7 +6,7 @@ use sign::iss;
 use core::mem;
 use alloc::*;
 
-pub fn keys(seed: &IntoTrits<Trit>, start: usize, count: usize, security: u8) -> Vec<Vec<Trit>> {
+pub fn keys(seed: &[Trit], start: usize, count: usize, security: u8) -> Vec<Vec<Trit>> {
     let mut trits: Vec<Trit> = seed.trits();
     for _ in 0..start {
         trits.as_mut_slice().incr();
@@ -57,10 +57,10 @@ pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
     out
 }
 
-pub fn root(address: &IntoTrits<Trit>, hashes: &[Vec<Trit>], index: usize) -> Vec<Trit> {
+pub fn root(address: &[Trit], hashes: &[Vec<Trit>], index: usize) -> Vec<Trit> {
     let mut curl = CpuCurl::<Trit>::default();
     let mut i = 1;
-    hashes.into_iter().fold(address.trits(), |acc, hash| {
+    hashes.into_iter().fold(address.to_vec(), |acc, hash| {
         curl.reset();
         if i & index == 0 {
             curl.absorb(&acc);

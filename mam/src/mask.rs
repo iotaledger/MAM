@@ -3,32 +3,32 @@ use tmath::*;
 use curl::*;
 use alloc::Vec;
 
-pub fn mask<C>(payload: &IntoTrits<Trit>, keys: &[Vec<Trit>]) -> Vec<Trit>
+pub fn mask<C>(payload: &[Trit], keys: &[Vec<Trit>]) -> Vec<Trit>
 where
     C: Curl<Trit>,
 {
-    let mut out: Vec<Trit> = Vec::with_capacity(payload.len_trits());
+    let mut out: Vec<Trit> = Vec::with_capacity(payload.len());
     let mut curl = C::default();
     for key in keys {
-        curl.absorb(&key.trits());
+        curl.absorb(&key);
     }
-    for chunk in payload.trits().chunks(HASH_LENGTH) {
+    for chunk in payload.chunks(HASH_LENGTH) {
         let key_chunk = curl.squeeze(chunk.len());
         out.extend(chunk.iter().zip(key_chunk.iter()).map(sum));
     }
     out
 }
 
-pub fn unmask<C>(payload: &IntoTrits<Trit>, keys: &[Vec<Trit>]) -> Vec<Trit>
+pub fn unmask<C>(payload: &[Trit], keys: &[Vec<Trit>]) -> Vec<Trit>
 where
     C: Curl<Trit>,
 {
-    let mut out: Vec<Trit> = Vec::with_capacity(payload.len_trits());
+    let mut out: Vec<Trit> = Vec::with_capacity(payload.len());
     let mut curl = C::default();
     for key in keys {
-        curl.absorb(&key.trits());
+        curl.absorb(&key);
     }
-    for chunk in payload.trits().chunks(HASH_LENGTH) {
+    for chunk in payload.chunks(HASH_LENGTH) {
         let key_chunk: Vec<Trit> = curl.squeeze(chunk.len()).iter().map(|t| -t).collect();
         out.extend(chunk.iter().zip(key_chunk.iter()).map(sum));
     }

@@ -5,7 +5,7 @@ use trytes::num;
 
 const ENCODER_MASK: isize = 7;
 
-pub fn decode(input: &IntoTrits<Trit>) -> (usize, usize) {
+pub fn decode(input: &[Trit]) -> (usize, usize) {
     let mut positive: Vec<Trit> = Vec::with_capacity(TRITS_PER_TRYTE);
     let negative: Vec<Trit> = input
         .trits()

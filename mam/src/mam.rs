@@ -7,14 +7,14 @@ use auth::*;
 use mask::*;
 use errors::*;
 
-pub fn message_id<T, C>(keys: &[&IntoTrits<T>]) -> Vec<T>
+pub fn message_id<T, C>(keys: &[Vec<T>]) -> Vec<T>
 where
     T: Copy + Clone + Sized,
     C: Curl<T>,
 {
     let mut c = C::default();
     for key in keys {
-        c.absorb(key.trits().as_slice());
+        c.absorb(key.as_slice());
     }
     let mask = c.squeeze(HASH_LENGTH);
     c.reset();
@@ -23,8 +23,8 @@ where
 }
 
 pub fn create<C, H>(
-    seed: &IntoTrits<Trit>,
-    message: &IntoTrits<Trit>,
+    seed: &[Trit],
+    message: &[Trit],
     start: usize,
     count: usize,
     index: usize,
@@ -75,15 +75,15 @@ where
 }
 
 pub fn parse<C>(
-    payload: &IntoTrits<Trit>,
-    root: &IntoTrits<Trit>,
+    payload: &[Trit],
+    root: &[Trit],
     index: usize,
 ) -> Result<(Vec<Trit>, Vec<Trit>), MamError>
 where
     C: Curl<Trit>,
 {
     let index_trits = num::int2trits(index as isize, num::min_trits(index as isize));
-    let channel_key: Vec<Vec<Trit>> = vec![root.trits(), index_trits];
+    let channel_key: Vec<Vec<Trit>> = vec![root.to_vec(), index_trits];
     let unmasked_payload = unmask::<C>(payload, &channel_key);
     authenticate::<C>(&unmasked_payload, root, index)
 }

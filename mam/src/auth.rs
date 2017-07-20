@@ -7,9 +7,9 @@ use trytes::*;
 use errors::*;
 
 pub fn sign<C, H>(
-    message_in: &IntoTrits<Trit>,
-    next: &IntoTrits<Trit>,
-    key: &IntoTrits<Trit>,
+    message_in: &[Trit],
+    next: &[Trit],
+    key: &[Trit],
     hashes: &[Vec<Trit>],
     security: u8,
 ) -> Vec<Trit>
@@ -17,11 +17,7 @@ where
     C: Curl<Trit>,
     H: HammingNonce<Trit>,
 {
-    let message: Vec<Trit> = next.trits()
-        .iter()
-        .chain(message_in.trits().iter())
-        .cloned()
-        .collect();
+    let message: Vec<Trit> = next.iter().chain(message_in.iter()).cloned().collect();
     let message_length = message.len() / TRITS_PER_TRYTE;
     let message_nonce: Vec<Trit> = H::search(&message, TRITS_PER_TRYTE as u8, security).unwrap();
     let signature = {
@@ -33,7 +29,7 @@ where
         curl.absorb(&len_trits);
         curl.absorb(&message);
         curl.absorb(&message_nonce);
-        iss::signature::<C>(&curl.squeeze(HASH_LENGTH), key)
+        iss::signature::<C>(&curl.squeeze(HASH_LENGTH), &key)
     };
     pascal::encode(message_length)
         .into_iter()
@@ -58,8 +54,8 @@ where
 }
 
 pub fn authenticate<C>(
-    payload: &IntoTrits<Trit>,
-    root: &IntoTrits<Trit>,
+    payload: &[Trit],
+    root: &[Trit],
     index: usize,
 ) -> Result<(Vec<Trit>, Vec<Trit>), MamError>
 where
@@ -67,9 +63,8 @@ where
 {
 
     let length;
-    let trits: Vec<Trit> = payload.trits();
-    let mut payload_iter = trits.iter();
-    let (message_length, message_length_end) = pascal::decode(payload);
+    let mut payload_iter = payload.iter();
+    let (message_length, message_length_end) = pascal::decode(&payload);
     let message: Vec<Trit> = payload_iter
         .by_ref()
         .skip(message_length_end)
@@ -79,7 +74,7 @@ where
     let nonce: Vec<Trit> = payload_iter
         .by_ref()
         .skip({
-            let t: Vec<Trit> = trits[(message_length_end + message.len())..]
+            let t: Vec<Trit> = payload[(message_length_end + message.len())..]
                 .into_iter()
                 .cloned()
                 .collect();
@@ -123,8 +118,7 @@ where
             };
             merkle::root(&address, &siblings, index)
         };
-        let root_trits: Vec<Trit> = root.trits();
-        if calculated_root == root_trits {
+        if calculated_root == root {
             let next_root: Vec<Trit> = message[..HASH_LENGTH].to_vec();
             let message_out: Vec<Trit> = message[HASH_LENGTH..].to_vec();
             Ok((message_out, next_root))
