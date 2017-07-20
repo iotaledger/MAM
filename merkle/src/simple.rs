@@ -7,7 +7,7 @@ use core::mem;
 use alloc::*;
 
 pub fn keys(seed: &[Trit], start: usize, count: usize, security: u8) -> Vec<Vec<Trit>> {
-    let mut trits: Vec<Trit> = seed.trits();
+    let mut trits: Vec<Trit> = seed.to_vec();
     for _ in 0..start {
         trits.as_mut_slice().incr();
     }

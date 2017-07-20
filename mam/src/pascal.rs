@@ -2,7 +2,6 @@ use core::iter;
 
 use alloc::Vec;
 use trytes::constants::*;
-use trytes::types::*;
 use trytes::num;
 
 const ENCODER_MASK: isize = 7;
@@ -10,7 +9,6 @@ const ENCODER_MASK: isize = 7;
 pub fn decode(input: &[Trit]) -> (usize, usize) {
     let mut positive: Vec<Trit> = Vec::with_capacity(TRITS_PER_TRYTE);
     let negative: Vec<Trit> = input
-        .trits()
         .chunks(TRITS_PER_TRYTE)
         .take_while(|tryte| {
             let val = num::trits2int(tryte);
@@ -28,7 +26,7 @@ pub fn decode(input: &[Trit]) -> (usize, usize) {
         let num_negative_trytes = negative.len() / 3;
         num_negative_trytes / 3 + if num_negative_trytes % 3 == 0 { 0 } else { 1 }
     };
-    let encoders: Vec<isize> = input.trits()[encoders_start..]
+    let encoders: Vec<isize> = input[encoders_start..]
         .chunks(2)
         .take(num_encoder_pairs)
         .map(num::trits2int)
@@ -136,13 +134,18 @@ mod tests {
     use super::*;
     use alloc::*;
     use trytes::num;
+    use trytes::string::*;
 
     #[test]
     fn from_encoder_trytes() {
-        let num_trytes: Vec<Trit> = "ABXDEFG".trits();
+        let num_trytes: Vec<Trit> = "ABXDEFG".chars().flat_map(char_to_trits).cloned().collect();
         let num_val = num::trits2int(&num_trytes) as usize;
         let length = encode(num_val);
-        let expect_trytes: Vec<Trit> = "ZYXWVUGIA".trits();
+        let expect_trytes: Vec<Trit> = "ZYXWVUGIA"
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
 
         assert_eq!(expect_trytes, length);
         let (val, end) = decode(&length);

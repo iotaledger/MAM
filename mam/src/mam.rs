@@ -44,7 +44,9 @@ where
             let keys = merkle::keys(seed, start, count, security);
             key = keys[index].clone();
             addresses = keys.iter()
-                .map(|ref k| iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(&k.as_slice())))
+                .map(|ref k| {
+                    iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(k.as_slice()))
+                })
                 .collect();
         }
         let siblings = merkle::siblings(&addresses, index);
@@ -55,7 +57,7 @@ where
         let next_addrs: Vec<Vec<Trit>> = merkle::keys(seed, next_start, next_count, security)
             .iter()
             .map(|ref key| {
-                iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(&key.as_slice()))
+                iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(key.as_slice()))
             })
             .collect();
         merkle::root(&next_addrs[0], &merkle::siblings(&next_addrs, 0), 0)
@@ -97,8 +99,15 @@ mod tests {
         let seed: Vec<Trit> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
                              ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
                              ABCDEFGHIJKLMNOPQRSTUVWXYZ9"
-            .trits();
-        let message: Vec<Trit> = "IAMSOMEMESSAGE9HEARMEROARMYMESSAGETOTHEWORLDYOUHEATHEN".trits();
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
+        let message: Vec<Trit> = "IAMSOMEMESSAGE9HEARMEROARMYMESSAGETOTHEWORLDYOUHEATHEN"
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
         let security = 1;
         let start = 1;
         let count = 9;
