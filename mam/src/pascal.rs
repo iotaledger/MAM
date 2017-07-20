@@ -1,3 +1,5 @@
+use core::iter;
+
 use alloc::Vec;
 use trytes::constants::*;
 use trytes::types::*;
@@ -39,11 +41,12 @@ pub fn decode(input: &[Trit]) -> (usize, usize) {
             let encoder = *e + TRITS_PER_TRYTE as isize;
             let mut trytes_out: Vec<Trit> = Vec::with_capacity(trytes.len());
             for tryte in trytes.chunks(TRITS_PER_TRYTE) {
-                trytes_out.extend(if ((encoder >> i) & 1isize) != 0isize {
-                    tryte.iter().map(|trit| -trit).collect()
+                if ((encoder >> i) & 1isize) != 0isize {
+                    let mut neg: Vec<Trit> = tryte.iter().map(|trit| -trit).collect();
+                    trytes_out.append(&mut neg);
                 } else {
-                    tryte.to_vec()
-                });
+                    trytes_out.extend_from_slice(tryte)
+                };
                 i += 1;
             }
             trytes_out.into_iter()
@@ -70,16 +73,20 @@ pub fn encode(input: usize) -> Vec<Trit> {
     let mut encoding = 0;
     let mut trits: Vec<Trit> = {
         let mut myvec = num::int2trits(input as isize, length);
-        while myvec.len() != myvec.capacity() {
-            myvec.push(0);
+
+        {
+            let delta = myvec.capacity() - myvec.len();
+            if delta != 0 {
+                myvec.append(&mut iter::repeat(0 as Trit).take(delta).collect());
+            }
         }
+
         let mut index = 0;
         myvec
             .chunks(TRITS_PER_TRYTE)
             .map(|c| {
                 let val = num::trits2int(c);
                 let out = if val.is_positive() && index < negative_length {
-
                     encoding |= 1 << index;
                     c.iter().map(|t| -t).collect()
                 } else {
@@ -90,8 +97,8 @@ pub fn encode(input: usize) -> Vec<Trit> {
             })
             .fold(
                 Vec::with_capacity(length as usize + encoder_trits_size),
-                |mut acc, v| {
-                    acc.extend(v);
+                |mut acc, mut v| {
+                    acc.append(&mut v);
                     acc
                 },
             )
@@ -108,12 +115,16 @@ pub fn encode(input: usize) -> Vec<Trit> {
                 }
                 res
             })
-            .fold(Vec::with_capacity(encoder_trits_size), |mut acc, v| {
-                acc.extend(v);
+            .fold(Vec::with_capacity(encoder_trits_size), |mut acc, mut v| {
+                acc.append(&mut v);
                 acc
             });
-        while out.len() != out.capacity() {
-            out.push(0);
+
+        let delta = out.capacity() - out.len();
+
+        if delta != 0 {
+            let mut add: Vec<Trit> = iter::repeat(0 as Trit).take(delta).collect();
+            out.append(&mut add);
         }
         out
     });

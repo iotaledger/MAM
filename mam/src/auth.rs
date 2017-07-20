@@ -74,10 +74,7 @@ where
     let nonce: Vec<Trit> = payload_iter
         .by_ref()
         .skip({
-            let t: Vec<Trit> = payload[(message_length_end + message.len())..]
-                .into_iter()
-                .cloned()
-                .collect();
+            let t = &payload[(message_length_end + message.len())..];
             let (l, e) = pascal::decode(&t);
             length = l * TRITS_PER_TRYTE;
             e

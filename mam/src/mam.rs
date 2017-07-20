@@ -58,7 +58,7 @@ where
                 iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(&key.as_slice()))
             })
             .collect();
-        merkle::root(&next_addrs[0].clone(), &merkle::siblings(&next_addrs, 0), 0)
+        merkle::root(&next_addrs[0], &merkle::siblings(&next_addrs, 0), 0)
     };
 
     let channel_key: Vec<Vec<Trit>> =

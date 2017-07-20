@@ -26,8 +26,7 @@ pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
     let mut out: Vec<Vec<Trit>> = Vec::with_capacity(hash_count);
     let mut curl = CpuCurl::<Trit>::default();
     let mut hash_index = if index & 1 == 0 { index + 1 } else { index - 1 };
-    let mut hashes: Vec<Vec<Trit>> = Vec::with_capacity(addrs.len());
-    hashes.extend_from_slice(addrs);
+    let mut hashes: Vec<Vec<Trit>> = addrs.to_vec();
     let mut length = hashes.len();
     while length > 1 {
         if length & 1 == 1 {
@@ -41,18 +40,17 @@ pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
         } else {
             hash_index -= 1;
         }
-        hashes = {
-            let mut combined: Vec<Vec<Trit>> = Vec::with_capacity(length / 2);
-            length /= 2;
-            for hash_chunks in hashes.chunks(2) {
-                for hash in hash_chunks {
-                    curl.absorb(hash);
-                }
-                combined.push(curl.rate().to_vec());
-                curl.reset();
-            }
-            combined
-        };
+
+        length /= 2;
+        for i in 0..length {
+            curl.absorb(&hashes[i*2]);
+            curl.absorb(&hashes[i*2+1]);
+
+            hashes[i] = curl.rate().to_vec();
+            curl.reset();
+        }
+
+        hashes.truncate(length);
     }
     out
 }

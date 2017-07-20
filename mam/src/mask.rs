@@ -12,8 +12,8 @@ where
     for key in keys {
         curl.absorb(&key);
     }
+    let key_chunk = curl.rate();
     for chunk in payload.chunks(HASH_LENGTH) {
-        let key_chunk = curl.squeeze(chunk.len());
         out.extend(chunk.iter().zip(key_chunk.iter()).map(sum));
     }
     out
@@ -28,8 +28,9 @@ where
     for key in keys {
         curl.absorb(&key);
     }
+
+    let key_chunk: Vec<Trit> = curl.rate().iter().map(|t| -t).collect();
     for chunk in payload.chunks(HASH_LENGTH) {
-        let key_chunk: Vec<Trit> = curl.squeeze(chunk.len()).iter().map(|t| -t).collect();
         out.extend(chunk.iter().zip(key_chunk.iter()).map(sum));
     }
     out
