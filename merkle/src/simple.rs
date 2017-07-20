@@ -48,7 +48,7 @@ pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
                 for hash in hash_chunks {
                     curl.absorb(hash);
                 }
-                combined.push(curl.squeeze(HASH_LENGTH));
+                combined.push(curl.rate().to_vec());
                 curl.reset();
             }
             combined
@@ -70,7 +70,7 @@ pub fn root(address: &[Trit], hashes: &[Vec<Trit>], index: usize) -> Vec<Trit> {
             curl.absorb(&acc);
         }
         i <<= 1;
-        curl.squeeze(HASH_LENGTH)
+        curl.rate().to_vec()
     })
 }
 

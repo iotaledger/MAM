@@ -16,10 +16,10 @@ where
     for key in keys {
         c.absorb(key.as_slice());
     }
-    let mask = c.squeeze(HASH_LENGTH);
+    let mask = c.rate().to_vec();
     c.reset();
     c.absorb(&mask);
-    c.squeeze(HASH_LENGTH)
+    c.rate().to_vec()
 }
 
 pub fn create<C, H>(

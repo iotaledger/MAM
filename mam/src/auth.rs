@@ -29,7 +29,7 @@ where
         curl.absorb(&len_trits);
         curl.absorb(&message);
         curl.absorb(&message_nonce);
-        iss::signature::<C>(&curl.squeeze(HASH_LENGTH), &key)
+        iss::signature::<C>(&curl.rate(), &key)
     };
     pascal::encode(message_length)
         .into_iter()
@@ -94,7 +94,7 @@ where
         curl.absorb(&len_trits);
         curl.absorb(&message);
         curl.absorb(&nonce);
-        curl.squeeze(HASH_LENGTH)
+        curl.rate().to_vec()
     };
     let security = iss::checksum_security(&hash);
     if security != 0 {
