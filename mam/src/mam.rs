@@ -44,7 +44,7 @@ where
             let keys = merkle::keys(seed, start, count, security);
             key = keys[index].clone();
             addresses = keys.iter()
-                .map(|k| iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(k)))
+                .map(|ref k| iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(&k.as_slice())))
                 .collect();
         }
         let siblings = merkle::siblings(&addresses, index);
@@ -54,9 +54,8 @@ where
     let next = {
         let next_addrs: Vec<Vec<Trit>> = merkle::keys(seed, next_start, next_count, security)
             .iter()
-            .map(|k| {
-                let key: Vec<Trit> = k.clone();
-                iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(&key))
+            .map(|ref key| {
+                iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(&key.as_slice()))
             })
             .collect();
         merkle::root(&next_addrs[0].clone(), &merkle::siblings(&next_addrs, 0), 0)
