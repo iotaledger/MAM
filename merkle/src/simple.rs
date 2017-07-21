@@ -12,10 +12,15 @@ pub fn keys(seed: &[Trit], start: usize, count: usize, security: u8) -> Vec<Vec<
         trits.as_mut_slice().incr();
     }
     let mut out: Vec<Vec<Trit>> = Vec::with_capacity(count);
+    let mut security_space = vec![0; security as usize * iss::KEY_LENGTH];
+    let mut key = vec![0; iss::KEY_LENGTH];
     for _ in 0..count {
-        let subseed = iss::subseed::<CpuCurl<Trit>>(&trits, 0);
+        let mut subseed = trits.clone();
+        iss::subseed::<CpuCurl<Trit>>(&trits, 0, &mut subseed);
         trits.as_mut_slice().incr();
-        out.push(iss::key::<Trit, CpuCurl<Trit>>(&subseed, security));
+
+        iss::key::<Trit, CpuCurl<Trit>>(&subseed, &mut security_space, &mut key);
+        out.push(key.clone());
     }
     out
 }
@@ -23,11 +28,13 @@ pub fn keys(seed: &[Trit], start: usize, count: usize, security: u8) -> Vec<Vec<
 pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
     let usize_size = mem::size_of::<usize>() * 8;
     let hash_count = usize_size - index.leading_zeros() as usize;
+
     let mut out: Vec<Vec<Trit>> = Vec::with_capacity(hash_count);
     let mut curl = CpuCurl::<Trit>::default();
     let mut hash_index = if index & 1 == 0 { index + 1 } else { index - 1 };
     let mut hashes: Vec<Vec<Trit>> = addrs.to_vec();
     let mut length = hashes.len();
+
     while length > 1 {
         if length & 1 == 1 {
             hashes.push(vec![0; HASH_LENGTH]);
@@ -58,18 +65,27 @@ pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
 pub fn root(address: &[Trit], hashes: &[Vec<Trit>], index: usize) -> Vec<Trit> {
     let mut curl = CpuCurl::<Trit>::default();
     let mut i = 1;
-    hashes.into_iter().fold(address.to_vec(), |acc, hash| {
+
+    let mut out = address.to_vec();
+    let mut helper = |out: &mut [Trit], hash: &[Trit]| {
         curl.reset();
         if i & index == 0 {
-            curl.absorb(&acc);
+            curl.absorb(&out);
             curl.absorb(&hash);
         } else {
             curl.absorb(&hash);
-            curl.absorb(&acc);
+            curl.absorb(&out);
         }
         i <<= 1;
-        curl.rate().to_vec()
-    })
+
+        out.clone_from_slice(curl.rate());
+    };
+
+    for hash in hashes {
+        helper(&mut out, &hash);
+    }
+
+    out
 }
 
 #[cfg(test)]
@@ -90,11 +106,15 @@ mod tests {
         let count = 9;
         let security = 1;
         let keys = keys(&seed, start, count, security);
+
+        let mut digest =vec![0; iss::DIGEST_LENGTH];
         let addresses: Vec<Vec<Trit>> = keys.iter()
             .map(|k| {
-                iss::address::<Trit, CpuCurl<Trit>>(
-                    &iss::digest_key::<Trit, CpuCurl<Trit>>(&k.as_slice()),
-                )
+                iss::digest_key::<Trit, CpuCurl<Trit>>(&k.as_slice(), &mut digest);
+                let mut address = vec![0; iss::ADDRESS_LENGTH];
+                iss::address::<Trit, CpuCurl<Trit>>(&digest, &mut address);
+
+                address
             })
             .collect();
         let hashes = siblings(&addresses, 0);
