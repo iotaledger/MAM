@@ -19,18 +19,21 @@ where
 {
     let message: Vec<Trit> = next.iter().chain(message_in.iter()).cloned().collect();
     let message_length = message.len() / TRITS_PER_TRYTE;
-    let message_nonce: Vec<Trit> = H::search(&message, TRITS_PER_TRYTE as u8, security).unwrap();
+    let mut message_nonce = vec![0; HASH_LENGTH];
+    H::search(&message, security, &mut message_nonce);
+
     let signature = {
+        let mut signature = vec![0; iss::SIGNATURE_LENGTH];
         let mut curl = C::default();
-        let len_trits: Vec<Trit> = num::int2trits(
-            message_length as isize,
-            num::min_trits(message_length as isize),
-        );
+        let mut len_trits = vec![0; num::min_trits(message_length as isize)];
+        num::int2trits(message_length as isize, &mut len_trits);
         curl.absorb(&len_trits);
         curl.absorb(&message);
         curl.absorb(&message_nonce);
-        iss::signature::<C>(&curl.rate(), &key)
+        iss::signature::<C>(&curl.rate(), &key, &mut signature);
+        signature
     };
+
     pascal::encode(message_length)
         .into_iter()
         .chain(message.into_iter())
@@ -84,10 +87,8 @@ where
         .collect();
     let hash = {
         let mut curl = C::default();
-        let len_trits: Vec<Trit> = num::int2trits(
-            message_length as isize,
-            num::min_trits(message_length as isize),
-        );
+        let mut len_trits = vec![0; num::min_trits(message_length as isize)];
+        num::int2trits(message_length as isize, &mut len_trits);
         curl.absorb(&len_trits);
         curl.absorb(&message);
         curl.absorb(&nonce);
@@ -96,14 +97,17 @@ where
     let security = iss::checksum_security(&hash);
     if security != 0 {
         let calculated_root: Vec<Trit> = {
-            let address: Vec<Trit> = {
-                let signature: Vec<Trit> = payload_iter
-                    .by_ref()
-                    .take(security * iss::KEY_LENGTH)
-                    .cloned()
-                    .collect();
-                iss::address::<Trit, C>(&iss::digest_bundle_signature::<C>(&hash, &signature))
-            };
+            let mut address = vec![0; iss::ADDRESS_LENGTH];
+            let mut digest = vec![0; iss::DIGEST_LENGTH];
+            let signature: Vec<Trit> = payload_iter
+                .by_ref()
+                .take(security * iss::KEY_LENGTH)
+                .cloned()
+                .collect();
+
+            iss::digest_bundle_signature::<C>(&hash, &signature, &mut digest);
+            iss::address::<Trit, C>(&digest, &mut address);
+
             let siblings: Vec<Vec<Trit>> = {
                 let end_trits: Vec<Trit> = payload_iter.by_ref().cloned().collect();
                 let l = pascal::decode(&end_trits);

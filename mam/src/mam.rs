@@ -36,6 +36,10 @@ where
     C: Curl<Trit>,
     H: HammingNonce<Trit>,
 {
+
+    let mut digest = vec![0; iss::DIGEST_LENGTH];
+    let mut address = vec![0; iss::ADDRESS_LENGTH];
+
     // generate the key and the get the merkle tree hashes
     let (key, siblings, root) = {
         let key: Vec<Trit>;
@@ -45,7 +49,9 @@ where
             key = keys[index].clone();
             addresses = keys.iter()
                 .map(|ref k| {
-                    iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(k.as_slice()))
+                    iss::digest_key::<Trit, C>(&k, &mut digest);
+                    iss::address::<Trit, C>(&digest, &mut address);
+                    address.clone()
                 })
                 .collect();
         }
@@ -57,7 +63,9 @@ where
         let next_addrs: Vec<Vec<Trit>> = merkle::keys(seed, next_start, next_count, security)
             .iter()
             .map(|ref key| {
-                iss::address::<Trit, C>(&iss::digest_key::<Trit, C>(key.as_slice()))
+                iss::digest_key::<Trit, C>(&key, &mut digest);
+                iss::address::<Trit, C>(&digest, &mut address);
+                address.clone()
             })
             .collect();
         merkle::root(&next_addrs[0], &merkle::siblings(&next_addrs, 0), 0)
@@ -66,7 +74,11 @@ where
     let channel_key: Vec<Vec<Trit>> =
         vec![
             root.clone(),
-            num::int2trits(index as isize, num::min_trits(index as isize)),
+            {
+                let mut t = vec![0; num::min_trits(index as isize)];
+                num::int2trits(index as isize, &mut t);
+                t
+            }
         ];
     let masked_payload = mask::<C>(
         &sign::<C, H>(message, &next, &key, &siblings, security),
@@ -83,7 +95,9 @@ pub fn parse<C>(
 where
     C: Curl<Trit>,
 {
-    let index_trits = num::int2trits(index as isize, num::min_trits(index as isize));
+    let mut index_trits = vec![0; num::min_trits(index as isize)];
+    num::int2trits(index as isize, &mut index_trits);
+
     let channel_key: Vec<Vec<Trit>> = vec![root.to_vec(), index_trits];
     let unmasked_payload = unmask::<C>(payload, &channel_key);
     authenticate::<C>(&unmasked_payload, root, index)

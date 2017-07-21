@@ -1,6 +1,6 @@
 use core::iter;
 
-use alloc::Vec;
+use alloc::*;
 use trytes::constants::*;
 use trytes::num;
 
@@ -70,7 +70,8 @@ pub fn encode(input: usize) -> Vec<Trit> {
     let encoder_trits_size = num::round_third(encoder_trit_count);
     let mut encoding = 0;
     let mut trits: Vec<Trit> = {
-        let mut myvec = num::int2trits(input as isize, length);
+        let mut myvec = vec![0; length as usize];
+        num::int2trits(input as isize, &mut myvec);
 
         {
             let delta = myvec.capacity() - myvec.len();
@@ -107,10 +108,8 @@ pub fn encode(input: usize) -> Vec<Trit> {
             .map(|i| {
                 let j = i * 3;
                 let val = ((encoding >> j) & ENCODER_MASK) as isize - TRITS_PER_TRYTE as isize;
-                let mut res = num::int2trits(val, 2);
-                while res.len() != res.capacity() {
-                    res.push(0);
-                }
+                let mut res = vec![0; 2];
+                num::int2trits(val, &mut res);
                 res
             })
             .fold(Vec::with_capacity(encoder_trits_size), |mut acc, mut v| {
@@ -132,7 +131,6 @@ pub fn encode(input: usize) -> Vec<Trit> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::*;
     use trytes::num;
     use trytes::string::*;
 
