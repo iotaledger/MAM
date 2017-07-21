@@ -2,7 +2,7 @@
 #![feature(const_fn)]
 #![no_std]
 
-#![macro_use]
+#[macro_use]
 extern crate alloc;
 
 extern crate iota_trytes as trytes;

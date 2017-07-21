@@ -6,31 +6,45 @@ use pascal;
 use trytes::*;
 use errors::*;
 
-pub fn sign<C, H>(
+pub fn sign<CT, CB, H>(
     message_in: &[Trit],
     next: &[Trit],
     key: &[Trit],
     hashes: &[Vec<Trit>],
     security: u8,
+    tcurl: &mut CT,
+    bcurl: &mut CB,
 ) -> Vec<Trit>
 where
-    C: Curl<Trit>,
+    CT: Curl<Trit>,
+    CB: Curl<BCTrit>,
     H: HammingNonce<Trit>,
 {
-    let message: Vec<Trit> = next.iter().chain(message_in.iter()).cloned().collect();
+    let mut message: Vec<Trit> = next.to_vec();
+    message.extend_from_slice(&message_in);
+
     let message_length = message.len() / TRITS_PER_TRYTE;
-    let mut message_nonce = vec![0; HASH_LENGTH];
-    H::search(&message, security, &mut message_nonce);
+    let mut message_nonce_space = vec![0; HASH_LENGTH];
+    let nonce_len = H::search::<CT, CB>(&message, security, TRITS_PER_TRYTE as usize, &mut message_nonce_space, tcurl, bcurl)
+        .unwrap();
+    let message_nonce = &message_nonce_space[0..nonce_len];
+
+    tcurl.reset();
+    bcurl.reset();
 
     let signature = {
         let mut signature = vec![0; iss::SIGNATURE_LENGTH];
-        let mut curl = C::default();
         let mut len_trits = vec![0; num::min_trits(message_length as isize)];
         num::int2trits(message_length as isize, &mut len_trits);
-        curl.absorb(&len_trits);
-        curl.absorb(&message);
-        curl.absorb(&message_nonce);
-        iss::signature::<C>(&curl.rate(), &key, &mut signature);
+
+        tcurl.absorb(&len_trits);
+        tcurl.absorb(&message);
+        tcurl.absorb(&message_nonce);
+
+        let rate = tcurl.rate().to_vec();
+        tcurl.reset();
+
+        iss::signature::<CT>(&rate, &key, &mut signature, tcurl);
         signature
     };
 
@@ -40,7 +54,7 @@ where
         .chain(
             pascal::encode(message_nonce.len() / TRITS_PER_TRYTE).into_iter(),
         )
-        .chain(message_nonce.into_iter())
+        .chain(message_nonce.iter().cloned())
         .chain(signature.into_iter())
         .chain(pascal::encode(hashes.len()).into_iter())
         .chain(
@@ -60,6 +74,8 @@ pub fn authenticate<C>(
     payload: &[Trit],
     root: &[Trit],
     index: usize,
+    curl1: &mut C,
+    curl2: &mut C,
 ) -> Result<(Vec<Trit>, Vec<Trit>), MamError>
 where
     C: Curl<Trit>,
@@ -86,14 +102,15 @@ where
         .cloned()
         .collect();
     let hash = {
-        let mut curl = C::default();
         let mut len_trits = vec![0; num::min_trits(message_length as isize)];
         num::int2trits(message_length as isize, &mut len_trits);
-        curl.absorb(&len_trits);
-        curl.absorb(&message);
-        curl.absorb(&nonce);
-        curl.rate().to_vec()
+        curl1.absorb(&len_trits);
+        curl1.absorb(&message);
+        curl1.absorb(&nonce);
+        curl1.rate().to_vec()
     };
+    curl1.reset();
+
     let security = iss::checksum_security(&hash);
     if security != 0 {
         let calculated_root: Vec<Trit> = {
@@ -105,8 +122,10 @@ where
                 .cloned()
                 .collect();
 
-            iss::digest_bundle_signature::<C>(&hash, &signature, &mut digest);
-            iss::address::<Trit, C>(&digest, &mut address);
+            iss::digest_bundle_signature::<C>(&hash, &signature, &mut digest, curl1, curl2);
+            curl1.reset();
+            iss::address::<Trit, C>(&digest, &mut address, curl1);
+            curl1.reset();
 
             let siblings: Vec<Vec<Trit>> = {
                 let end_trits: Vec<Trit> = payload_iter.by_ref().cloned().collect();
@@ -117,7 +136,7 @@ where
                     .map(|c| c.to_vec())
                     .collect()
             };
-            merkle::root(&address, &siblings, index)
+            merkle::root::<C>(&address, &siblings, index, curl1)
         };
         if calculated_root == root {
             let next_root: Vec<Trit> = message[..HASH_LENGTH].to_vec();

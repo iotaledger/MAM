@@ -7,22 +7,21 @@ use auth::*;
 use mask::*;
 use errors::*;
 
-pub fn message_id<T, C>(keys: &[Vec<T>]) -> Vec<T>
+pub fn message_id<T, C>(keys: &[Vec<T>], curl: &mut C) -> Vec<T>
 where
     T: Copy + Clone + Sized,
     C: Curl<T>,
 {
-    let mut c = C::default();
     for key in keys {
-        c.absorb(key.as_slice());
+        curl.absorb(key.as_slice());
     }
-    let mask = c.rate().to_vec();
-    c.reset();
-    c.absorb(&mask);
-    c.rate().to_vec()
+    let mask = curl.rate().to_vec();
+    curl.reset();
+    curl.absorb(&mask);
+    curl.rate().to_vec()
 }
 
-pub fn create<C, H>(
+pub fn create<C, CB, H>(
     seed: &[Trit],
     message: &[Trit],
     start: usize,
@@ -31,9 +30,13 @@ pub fn create<C, H>(
     next_start: usize,
     next_count: usize,
     security: u8,
+    curl1: &mut C,
+    curl2: &mut C,
+    bcurl: &mut CB,
 ) -> (Vec<Trit>, Vec<Trit>)
 where
     C: Curl<Trit>,
+    CB: Curl<BCTrit>,
     H: HammingNonce<Trit>,
 {
 
@@ -45,43 +48,64 @@ where
         let key: Vec<Trit>;
         let addresses: Vec<Vec<Trit>>;
         {
-            let keys = merkle::keys(seed, start, count, security);
+            let keys = merkle::keys(seed, start, count, security, curl1);
+            curl1.reset();
+
             key = keys[index].clone();
             addresses = keys.iter()
                 .map(|ref k| {
-                    iss::digest_key::<Trit, C>(&k, &mut digest);
-                    iss::address::<Trit, C>(&digest, &mut address);
+                    iss::digest_key::<Trit, C>(&k, &mut digest, curl1, curl2);
+                    curl1.reset();
+                    curl2.reset();
+                    iss::address::<Trit, C>(&digest, &mut address, curl1);
+                    curl1.reset();
                     address.clone()
                 })
                 .collect();
         }
-        let siblings = merkle::siblings(&addresses, index);
-        let root = merkle::root(&addresses[index], &siblings, index);
+        let siblings = merkle::siblings(&addresses, index, curl1);
+        curl1.reset();
+        let root = merkle::root(&addresses[index], &siblings, index, curl1);
+        curl1.reset();
         (key, siblings, root)
     };
     let next = {
-        let next_addrs: Vec<Vec<Trit>> = merkle::keys(seed, next_start, next_count, security)
-            .iter()
-            .map(|ref key| {
-                iss::digest_key::<Trit, C>(&key, &mut digest);
-                iss::address::<Trit, C>(&digest, &mut address);
-                address.clone()
-            })
-            .collect();
-        merkle::root(&next_addrs[0], &merkle::siblings(&next_addrs, 0), 0)
+        let next_addrs: Vec<Vec<Trit>> =
+            merkle::keys(seed, next_start, next_count, security, curl1)
+                .iter()
+                .map(|ref key| {
+                    curl1.reset();
+                    curl2.reset();
+                    iss::digest_key::<Trit, C>(&key, &mut digest, curl1, curl2);
+                    curl1.reset();
+                    iss::address::<Trit, C>(&digest, &mut address, curl1);
+                    address.clone()
+                })
+                .collect();
+        curl1.reset();
+        curl2.reset();
+        merkle::root(
+            &next_addrs[0],
+            &merkle::siblings(&next_addrs, 0, curl2),
+            0,
+            curl1,
+        )
     };
 
-    let channel_key: Vec<Vec<Trit>> =
-        vec![
-            root.clone(),
-            {
-                let mut t = vec![0; num::min_trits(index as isize)];
-                num::int2trits(index as isize, &mut t);
-                t
-            }
-        ];
+    curl1.reset();
+    curl2.reset();
+
+    let channel_key: Vec<Vec<Trit>> = vec![
+        root.clone(),
+        {
+            let mut t = vec![0; num::min_trits(index as isize)];
+            num::int2trits(index as isize, &mut t);
+            t
+        },
+    ];
+
     let masked_payload = mask::<C>(
-        &sign::<C, H>(message, &next, &key, &siblings, security),
+        &sign::<C, CB, H>(message, &next, &key, &siblings, security, curl1, bcurl),
         &channel_key,
     );
     (masked_payload, root)
@@ -91,6 +115,8 @@ pub fn parse<C>(
     payload: &[Trit],
     root: &[Trit],
     index: usize,
+    curl1: &mut C,
+    curl2: &mut C,
 ) -> Result<(Vec<Trit>, Vec<Trit>), MamError>
 where
     C: Curl<Trit>,
@@ -100,7 +126,7 @@ where
 
     let channel_key: Vec<Vec<Trit>> = vec![root.to_vec(), index_trits];
     let unmasked_payload = unmask::<C>(payload, &channel_key);
-    authenticate::<C>(&unmasked_payload, root, index)
+    authenticate::<C>(&unmasked_payload, root, index, curl1, curl2)
 }
 
 #[cfg(test)]
@@ -129,7 +155,11 @@ mod tests {
         let next_count = 4;
         let index = 3;
 
-        let (masked_payload, root) = create::<CpuCurl<Trit>, CpuHam>(
+        let mut c1 = CpuCurl::<Trit>::default();
+        let mut c2 = CpuCurl::<Trit>::default();
+        let mut bc = CpuCurl::<BCTrit>::default();
+
+        let (masked_payload, root) = create::<CpuCurl<Trit>, CpuCurl<BCTrit>, CpuHam>(
             &seed,
             &message,
             start,
@@ -138,8 +168,13 @@ mod tests {
             next_start,
             next_count,
             security,
+            &mut c1,
+            &mut c2,
+            &mut bc,
         );
-        let result = parse::<CpuCurl<Trit>>(&masked_payload, &root, index)
+        c1.reset();
+        c2.reset();
+        let result = parse::<CpuCurl<Trit>>(&masked_payload, &root, index, &mut c1, &mut c2)
             .ok()
             .unwrap();
         assert_eq!(result.0, message);
