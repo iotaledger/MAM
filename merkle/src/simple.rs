@@ -1,12 +1,11 @@
 use trytes::*;
 use tmath::*;
 use curl::*;
-use curl_cpu::*;
 use sign::iss;
 use core::mem;
 use alloc::*;
 
-pub fn keys(seed: &[Trit], start: usize, count: usize, security: u8) -> Vec<Vec<Trit>> {
+pub fn keys<C: Curl<Trit>>(seed: &[Trit], start: usize, count: usize, security: u8, curl: &mut C) -> Vec<Vec<Trit>> {
     let mut trits: Vec<Trit> = seed.to_vec();
     for _ in 0..start {
         trits.as_mut_slice().incr();
@@ -14,23 +13,25 @@ pub fn keys(seed: &[Trit], start: usize, count: usize, security: u8) -> Vec<Vec<
     let mut out: Vec<Vec<Trit>> = Vec::with_capacity(count);
     let mut security_space = vec![0; security as usize * iss::KEY_LENGTH];
     let mut key = vec![0; iss::KEY_LENGTH];
+
     for _ in 0..count {
         let mut subseed = trits.clone();
-        iss::subseed::<CpuCurl<Trit>>(&trits, 0, &mut subseed);
+        iss::subseed::<C>(&trits, 0, &mut subseed, curl);
+        curl.reset();
         trits.as_mut_slice().incr();
 
-        iss::key::<Trit, CpuCurl<Trit>>(&subseed, &mut security_space, &mut key);
+        iss::key::<Trit, C>(&subseed, &mut security_space, &mut key, curl);
+        curl.reset();
         out.push(key.clone());
     }
     out
 }
 
-pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
+pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, curl: &mut C) -> Vec<Vec<Trit>> {
     let usize_size = mem::size_of::<usize>() * 8;
     let hash_count = usize_size - index.leading_zeros() as usize;
 
     let mut out: Vec<Vec<Trit>> = Vec::with_capacity(hash_count);
-    let mut curl = CpuCurl::<Trit>::default();
     let mut hash_index = if index & 1 == 0 { index + 1 } else { index - 1 };
     let mut hashes: Vec<Vec<Trit>> = addrs.to_vec();
     let mut length = hashes.len();
@@ -62,8 +63,7 @@ pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
     out
 }
 
-pub fn root(address: &[Trit], hashes: &[Vec<Trit>], index: usize) -> Vec<Trit> {
-    let mut curl = CpuCurl::<Trit>::default();
+pub fn root<C: Curl<Trit>>(address: &[Trit], hashes: &[Vec<Trit>], index: usize, curl: &mut C) -> Vec<Trit> {
     let mut i = 1;
 
     let mut out = address.to_vec();
@@ -92,6 +92,7 @@ pub fn root(address: &[Trit], hashes: &[Vec<Trit>], index: usize) -> Vec<Trit> {
 mod tests {
     use super::*;
     use sign::iss;
+    use curl_cpu::*;
     #[test]
     fn it_does_not_panic() {
         let seed: Vec<Trit> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
@@ -102,26 +103,37 @@ mod tests {
             .cloned()
             .collect();
 
+        let mut c1 = CpuCurl::<Trit>::default();
+        let mut c2 = CpuCurl::<Trit>::default();
+
         let start = 1;
         let count = 9;
         let security = 1;
-        let keys = keys(&seed, start, count, security);
+        let keys = keys(&seed, start, count, security, &mut c1);
+
+        c1.reset();
 
         let mut digest =vec![0; iss::DIGEST_LENGTH];
         let addresses: Vec<Vec<Trit>> = keys.iter()
             .map(|k| {
-                iss::digest_key::<Trit, CpuCurl<Trit>>(&k.as_slice(), &mut digest);
+                iss::digest_key(&k.as_slice(), &mut digest, &mut c1, &mut c2);
+                c1.reset();
+                c2.reset();
                 let mut address = vec![0; iss::ADDRESS_LENGTH];
-                iss::address::<Trit, CpuCurl<Trit>>(&digest, &mut address);
+                iss::address(&digest, &mut address, &mut c1);
+                c1.reset();
 
                 address
             })
             .collect();
-        let hashes = siblings(&addresses, 0);
-        let expect = root(&addresses[0], &hashes, 0);
+        let hashes = siblings(&addresses, 0, &mut c1);
+        c1.reset();
+        let expect = root(&addresses[0], &hashes, 0, &mut c1);
         for index in 0..count {
-            let hashes = siblings(&addresses, index);
-            let root = root(&addresses[index], &hashes, index);
+            c1.reset();
+            let hashes = siblings(&addresses, index, &mut c1);
+            c1.reset();
+            let root = root(&addresses[index], &hashes, index, &mut c1);
             assert_eq!(trits_to_string(&root), trits_to_string(&expect));
         }
     }
