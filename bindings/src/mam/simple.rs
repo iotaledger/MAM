@@ -26,7 +26,11 @@ pub fn mam_create(
     let msg_str = unsafe { c_str_to_static_slice(c_message) };
     let msg: Vec<Trit> = msg_str.chars().flat_map(char_to_trits).cloned().collect();
 
-    let (masked_payload, root) = create::<CpuCurl<Trit>, CpuHam>(
+    let mut c1 = CpuCurl::<Trit>::default();
+    let mut c2 = CpuCurl::<Trit>::default();
+    let mut b1 = CpuCurl::<BCTrit>::default();
+
+    let (masked_payload, root) = create::<CpuCurl<Trit>, CpuCurl<BCTrit>, CpuHam>(
         &seed,
         &msg,
         start,
@@ -35,6 +39,9 @@ pub fn mam_create(
         next_start,
         next_count,
         security,
+        &mut c1,
+        &mut c2,
+        &mut b1,
     );
 
     let payload_str = {
@@ -60,7 +67,10 @@ pub fn mam_parse(c_payload: *const c_char, c_root: *const c_char, index: usize) 
     let root_str = unsafe { c_str_to_static_slice(c_root) };
     let root: Vec<Trit> = root_str.chars().flat_map(char_to_trits).cloned().collect();
 
-    let result = parse::<CpuCurl<Trit>>(&payload, &root, index);
+    let mut c1 = CpuCurl::<Trit>::default();
+    let mut c2 = CpuCurl::<Trit>::default();
+
+    let result = parse::<CpuCurl<Trit>>(&payload, &root, index, &mut c1, &mut c2);
     let (message, next_root) = result.ok().unwrap();
 
     let mut out_str = trits_to_string(message.as_slice()).unwrap();

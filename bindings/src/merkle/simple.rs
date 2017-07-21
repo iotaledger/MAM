@@ -4,6 +4,7 @@ use alloc::Vec;
 use alloc::string::String;
 use iota_trytes::*;
 use iota_merkle::*;
+use iota_curl_cpu::*;
 use util::c_str_to_static_slice;
 
 #[no_mangle]
@@ -11,7 +12,8 @@ pub fn merkle_keys(c_seed: *const c_char, start: usize, count: usize, security: 
     let seed_str = unsafe { c_str_to_static_slice(c_seed) };
     let seed: Vec<Trit> = seed_str.chars().flat_map(char_to_trits).cloned().collect();
 
-    let keys = keys(&seed, start, count, security);
+    let mut curl = CpuCurl::<Trit>::default();
+    let keys = keys(&seed, start, count, security, &mut curl);
 
     let out_str = {
         let s = keys.iter().fold(String::new(), |mut acc, key| {
@@ -33,7 +35,8 @@ pub fn merkle_siblings(c_addrs: *const c_char, index: usize) -> *const u8 {
         .map(|a| a.chars().flat_map(char_to_trits).cloned().collect())
         .collect();
 
-    let siblings = siblings(&addrs, index);
+    let mut curl = CpuCurl::<Trit>::default();
+    let siblings = siblings(&addrs, index, &mut curl);
 
     let out_str = {
         let siblings_str = siblings.iter().fold(String::new(), |mut acc, sibling| {
@@ -58,7 +61,8 @@ pub fn merkle_root(c_addr: *const c_char, c_siblings: *const c_char, index: usiz
         .map(|a| a.chars().flat_map(char_to_trits).cloned().collect())
         .collect();
 
-    let root = root(&addr, &siblings, index);
+    let mut curl = CpuCurl::<Trit>::default();
+    let root = root(&addr, &siblings, index, &mut curl);
 
     let out_str = Box::new(trits_to_string(root.as_slice()).unwrap() + "\0");
     &out_str.as_bytes()[0] as *const u8
