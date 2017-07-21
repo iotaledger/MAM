@@ -43,8 +43,8 @@ pub fn siblings(addrs: &[Vec<Trit>], index: usize) -> Vec<Vec<Trit>> {
 
         length /= 2;
         for i in 0..length {
-            curl.absorb(&hashes[i*2]);
-            curl.absorb(&hashes[i*2+1]);
+            curl.absorb(&hashes[i * 2]);
+            curl.absorb(&hashes[i * 2 + 1]);
 
             hashes[i] = curl.rate().to_vec();
             curl.reset();
@@ -81,7 +81,11 @@ mod tests {
         let seed: Vec<Trit> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
                              ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
                              ABCDEFGHIJKLMNOPQRSTUVWXYZ9"
-            .trits();
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
+
         let start = 1;
         let count = 9;
         let security = 1;
