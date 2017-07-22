@@ -12,7 +12,8 @@ where
     for key in keys {
         curl.absorb(&key);
     }
-    let key_chunk = curl.rate();
+    let mut key_chunk: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+    curl.squeeze(&mut key_chunk);
     for chunk in payload.chunks(HASH_LENGTH) {
         let mut c: Vec<Trit> = chunk
             .iter()
@@ -21,6 +22,7 @@ where
             .map(bct_sum)
             .collect();
         out.append(&mut c);
+        curl.duplex(&chunk, &mut key_chunk);
     }
     out
 }
@@ -35,14 +37,16 @@ where
         curl.absorb(&key);
     }
 
-    let key_chunk: Vec<Trit> = curl.rate().iter().map(|t| -t).collect();
+    let mut key_chunk: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+    curl.squeeze(&mut key_chunk);
     for chunk in payload.chunks(HASH_LENGTH) {
         let mut c: Vec<Trit> = chunk
             .iter()
             .cloned()
-            .zip(key_chunk.iter().cloned())
+            .zip(key_chunk.iter().map(|t| -t))
             .map(bct_sum)
             .collect();
+        curl.duplex(&c, &mut key_chunk);
         out.append(&mut c);
     }
     out
@@ -56,7 +60,7 @@ mod tests {
     use alloc::*;
     #[test]
     fn it_can_unmask() {
-        let payload: Vec<Trit> = "AMESSAGEFORYOU9"
+        let payload: Vec<Trit> = "AAMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9AMESSAGEFORYOU9MESSAGEFORYOU9"
             .chars()
             .flat_map(char_to_trits)
             .cloned()
@@ -74,6 +78,6 @@ mod tests {
         let keys: Vec<Vec<Trit>> = vec![auth_id, index];
         let cipher = mask::<CpuCurl<Trit>>(&payload, &keys);
         let plain: Vec<Trit> = unmask::<CpuCurl<Trit>>(&cipher.clone(), &keys);
-        assert_eq!(trits_to_string(&plain), trits_to_string(&payload));
+        assert_eq!(trits_to_string(&payload), trits_to_string(&plain));
     }
 }
