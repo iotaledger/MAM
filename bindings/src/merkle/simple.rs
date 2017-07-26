@@ -1,5 +1,5 @@
 use cty::*;
-use alloc::boxed::Box;
+use core::mem;
 use alloc::Vec;
 use alloc::string::String;
 use iota_trytes::*;
@@ -22,9 +22,13 @@ pub fn merkle_keys(c_seed: *const c_char, start: usize, count: usize, security: 
             acc
         });
         s.trim();
-        Box::new(s)
+        s
     };
-    &out_str.as_bytes()[0] as *const u8
+
+    let ptr = out_str.as_ptr();
+    mem::forget(out_str);
+
+    ptr
 }
 
 #[no_mangle]
@@ -38,16 +42,17 @@ pub fn merkle_siblings(c_addrs: *const c_char, index: usize) -> *const u8 {
     let mut curl = CpuCurl::<Trit>::default();
     let siblings = siblings(&addrs, index, &mut curl);
 
-    let out_str = {
-        let siblings_str = siblings.iter().fold(String::new(), |mut acc, sibling| {
-            acc.push_str(trits_to_string(sibling.as_slice()).unwrap().as_str());
-            acc.push('\n');
-            acc
-        });
-        siblings_str.trim();
-        Box::new(siblings_str)
-    };
-    &out_str.as_bytes()[0] as *const u8
+    let siblings_str = siblings.iter().fold(String::new(), |mut acc, sibling| {
+        acc.push_str(trits_to_string(sibling.as_slice()).unwrap().as_str());
+        acc.push('\n');
+        acc
+    });
+
+    siblings_str.trim();
+    let ptr = siblings_str.as_ptr();
+    mem::forget(siblings_str);
+
+    ptr
 }
 
 #[no_mangle]
@@ -64,6 +69,9 @@ pub fn merkle_root(c_addr: *const c_char, c_siblings: *const c_char, index: usiz
     let mut curl = CpuCurl::<Trit>::default();
     let root = root(&addr, &siblings, index, &mut curl);
 
-    let out_str = Box::new(trits_to_string(root.as_slice()).unwrap() + "\0");
-    &out_str.as_bytes()[0] as *const u8
+    let out_str = trits_to_string(root.as_slice()).unwrap() + "\0";
+    let ptr = out_str.as_ptr();
+    mem::forget(out_str);
+
+    ptr
 }
