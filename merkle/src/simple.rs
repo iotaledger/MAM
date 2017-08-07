@@ -5,26 +5,31 @@ use sign::iss;
 use core::mem;
 use alloc::*;
 
-pub fn keys<C: Curl<Trit>>(seed: &[Trit], start: usize, count: usize, security: u8, curl: &mut C) -> Vec<Vec<Trit>> {
+pub fn keys<'a, C: Curl<Trit>>(
+    seed: &[Trit],
+    start: usize,
+    count: usize,
+    security: u8,
+    curl: &'a mut C,
+) -> impl Iterator<Item = [Trit; iss::KEY_LENGTH]> {
+
     let mut trits: Vec<Trit> = seed.to_vec();
     for _ in 0..start {
         trits.as_mut_slice().incr();
     }
-    let mut out: Vec<Vec<Trit>> = Vec::with_capacity(count);
-    let mut security_space = vec![0; security as usize * iss::KEY_LENGTH];
-    let mut key = vec![0; iss::KEY_LENGTH];
 
-    for _ in 0..count {
-        let mut subseed = trits.clone();
-        iss::subseed::<C>(&trits, 0, &mut subseed, curl);
+    (0..count).map(move |_| {
+        let mut key = [0 as Trit; iss::KEY_LENGTH];
+
+        iss::subseed::<C>(&trits, 0, &mut key, curl);
         curl.reset();
         trits.as_mut_slice().incr();
 
-        iss::key::<Trit, C>(&subseed, &mut security_space, &mut key, curl);
+        iss::key::<Trit, C>(&mut key, security, curl);
         curl.reset();
-        out.push(key.clone());
-    }
-    out
+
+        key
+    })
 }
 
 pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, curl: &mut C) -> Vec<Vec<Trit>> {
@@ -63,7 +68,12 @@ pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, curl: &mut C) 
     out
 }
 
-pub fn root<C: Curl<Trit>>(address: &[Trit], hashes: &[Vec<Trit>], index: usize, curl: &mut C) -> Vec<Trit> {
+pub fn root<C: Curl<Trit>>(
+    address: &[Trit],
+    hashes: &[Vec<Trit>],
+    index: usize,
+    curl: &mut C,
+) -> Vec<Trit> {
     let mut i = 1;
 
     let mut out = address.to_vec();
@@ -82,7 +92,7 @@ pub fn root<C: Curl<Trit>>(address: &[Trit], hashes: &[Vec<Trit>], index: usize,
     };
 
     for hash in hashes {
-        helper(&mut out, &hash);
+        helper(&mut out, hash);
     }
 
     out
@@ -105,25 +115,22 @@ mod tests {
 
         let mut c1 = CpuCurl::<Trit>::default();
         let mut c2 = CpuCurl::<Trit>::default();
+        let mut c3 = CpuCurl::<Trit>::default();
 
         let start = 1;
         let count = 9;
         let security = 1;
-        let keys = keys(&seed, start, count, security, &mut c1);
 
-        c1.reset();
-
-        let mut digest =vec![0; iss::DIGEST_LENGTH];
-        let addresses: Vec<Vec<Trit>> = keys.iter()
+        let mut digest = vec![0; iss::DIGEST_LENGTH];
+        let addresses: Vec<Vec<Trit>> = keys(&seed, start, count, security, &mut c1)
             .map(|k| {
-                iss::digest_key(&k.as_slice(), &mut digest, &mut c1, &mut c2);
-                c1.reset();
+                iss::digest_key(&k, &mut digest, &mut c2, &mut c3);
                 c2.reset();
-                let mut address = vec![0; iss::ADDRESS_LENGTH];
-                iss::address(&digest, &mut address, &mut c1);
-                c1.reset();
+                c3.reset();
+                iss::address(&mut digest, &mut c2);
+                c2.reset();
 
-                address
+                digest[0..iss::ADDRESS_LENGTH].to_vec()
             })
             .collect();
         let hashes = siblings(&addresses, 0, &mut c1);

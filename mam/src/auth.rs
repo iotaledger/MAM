@@ -5,6 +5,7 @@ use merkle;
 use pascal;
 use trytes::*;
 use errors::*;
+use core::slice;
 
 pub fn sign<CT, CB, H>(
     message_in: &[Trit],
@@ -25,15 +26,26 @@ where
 
     let message_length = message.len() / TRITS_PER_TRYTE;
     let mut message_nonce_space = vec![0; HASH_LENGTH];
-    let nonce_len = H::search::<CT, CB>(&message, security, TRITS_PER_TRYTE as usize, &mut message_nonce_space, tcurl, bcurl)
-        .unwrap();
+    let nonce_len = H::search::<CT, CB>(
+        &message,
+        security,
+        TRITS_PER_TRYTE as usize,
+        &mut message_nonce_space,
+        tcurl,
+        bcurl,
+    ).unwrap();
     let message_nonce = &message_nonce_space[0..nonce_len];
 
     tcurl.reset();
     bcurl.reset();
 
     let signature = {
-        let mut signature = vec![0; iss::SIGNATURE_LENGTH];
+        // we won't use BCurl anymore and we know
+        // that BCurl memory size = 2*Curl
+        let bundle: &mut [Trit] = unsafe {
+            slice::from_raw_parts_mut(bcurl.state_mut().as_mut_ptr() as *mut Trit, HASH_LENGTH)
+        };
+        let mut signature = vec![0; security as usize * iss::SIGNATURE_LENGTH];
         let mut len_trits = vec![0; num::min_trits(message_length as isize)];
         num::int2trits(message_length as isize, &mut len_trits);
 
@@ -41,22 +53,26 @@ where
         tcurl.absorb(&message);
         tcurl.absorb(&message_nonce);
 
-        let rate = tcurl.rate().to_vec();
+        bundle.clone_from_slice(tcurl.rate());
         tcurl.reset();
 
-        iss::signature::<CT>(&rate, &key, &mut signature, tcurl);
+        signature[0..security as usize * iss::KEY_LENGTH]
+            .clone_from_slice(&key[0..security as usize * iss::KEY_LENGTH]);
+
+        iss::signature::<CT>(bundle, &mut signature, tcurl);
         signature
     };
 
+    tcurl.reset();
+    bcurl.reset();
+
     pascal::encode(message_length)
-        .into_iter()
-        .chain(message.into_iter())
-        .chain(
-            pascal::encode(message_nonce.len() / TRITS_PER_TRYTE).into_iter(),
-        )
-        .chain(message_nonce.iter().cloned())
-        .chain(signature.into_iter())
-        .chain(pascal::encode(hashes.len()).into_iter())
+        .iter()
+        .chain(message.iter())
+        .chain(pascal::encode(message_nonce.len() / TRITS_PER_TRYTE).iter())
+        .chain(message_nonce.iter())
+        .chain(signature.iter())
+        .chain(pascal::encode(hashes.len()).iter())
         .chain(
             hashes
                 .into_iter()
@@ -65,8 +81,9 @@ where
                     acc.extend(v);
                     acc
                 })
-                .into_iter(),
+                .iter(),
         )
+        .cloned()
         .collect()
 }
 
@@ -114,18 +131,19 @@ where
     let security = iss::checksum_security(&hash);
     if security != 0 {
         let calculated_root: Vec<Trit> = {
-            let mut address = vec![0; iss::ADDRESS_LENGTH];
-            let mut digest = vec![0; iss::DIGEST_LENGTH];
-            let signature: Vec<Trit> = payload_iter
+            let mut signature: Vec<Trit> = payload_iter
                 .by_ref()
                 .take(security * iss::KEY_LENGTH)
                 .cloned()
                 .collect();
 
-            iss::digest_bundle_signature::<C>(&hash, &signature, &mut digest, curl1, curl2);
+            iss::digest_bundle_signature::<C>(&hash, &mut signature, curl1, curl2);
             curl1.reset();
-            iss::address::<Trit, C>(&digest, &mut address, curl1);
+            curl2.reset();
+
+            iss::address::<Trit, C>(&mut signature[..iss::DIGEST_LENGTH], curl1);
             curl1.reset();
+
 
             let siblings: Vec<Vec<Trit>> = {
                 let end_trits: Vec<Trit> = payload_iter.by_ref().cloned().collect();
@@ -136,8 +154,9 @@ where
                     .map(|c| c.to_vec())
                     .collect()
             };
-            merkle::root::<C>(&address, &siblings, index, curl1)
+            merkle::root::<C>(&signature[..iss::ADDRESS_LENGTH], &siblings, index, curl1)
         };
+
         if calculated_root == root {
             let next_root: Vec<Trit> = message[..HASH_LENGTH].to_vec();
             let message_out: Vec<Trit> = message[HASH_LENGTH..].to_vec();

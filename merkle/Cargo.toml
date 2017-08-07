@@ -19,3 +19,8 @@ git = "https://github.com/iotaledger/iota.rs"
 [features]
 default = [ ]
 parallel = []
+
+[dev-dependencies.iota-trytes]
+git = "https://github.com/iotaledger/iota.rs"
+features = ["alloc"]
+

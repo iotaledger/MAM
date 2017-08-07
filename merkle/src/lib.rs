@@ -1,5 +1,6 @@
 #![feature(alloc)]
 #![feature(const_fn)]
+#![feature(conservative_impl_trait)]
 #![no_std]
 
 #[macro_use]

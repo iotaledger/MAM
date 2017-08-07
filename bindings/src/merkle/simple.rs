@@ -16,8 +16,8 @@ pub fn merkle_keys(c_seed: *const c_char, start: usize, count: usize, security: 
     let keys = keys(&seed, start, count, security, &mut curl);
 
     let out_str = {
-        let s = keys.iter().fold(String::new(), |mut acc, key| {
-            acc.push_str(trits_to_string(key.as_slice()).unwrap().as_str());
+        let s = keys.fold(String::new(), |mut acc, key| {
+            acc.push_str(trits_to_string(&key).unwrap().as_str());
             acc.push('\n');
             acc
         });
