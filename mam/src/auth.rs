@@ -99,25 +99,21 @@ where
 {
 
     let length;
-    let mut payload_iter = payload.iter();
     let (message_length, message_length_end) = pascal::decode(&payload);
-    let message: Vec<Trit> = payload_iter
-        .by_ref()
-        .skip(message_length_end)
-        .take(message_length * TRITS_PER_TRYTE)
-        .cloned()
-        .collect();
-    let nonce: Vec<Trit> = payload_iter
-        .by_ref()
-        .skip({
-            let t = &payload[(message_length_end + message.len())..];
-            let (l, e) = pascal::decode(&t);
-            length = l * TRITS_PER_TRYTE;
-            e
-        })
-        .take(length)
-        .cloned()
-        .collect();
+    let mut pos = message_length_end;
+
+    let message = &payload[pos..pos+(message_length * TRITS_PER_TRYTE)];
+    pos += message_length * TRITS_PER_TRYTE;
+    let nonce = {
+        let t = &payload[pos..];
+        let (l, e) = pascal::decode(&t);
+        length = l * TRITS_PER_TRYTE;
+        pos += e;
+        &payload[pos..pos+length]
+    };
+
+    pos += length;
+
     let hash = {
         let mut len_trits = vec![0; num::min_trits(message_length as isize)];
         num::int2trits(message_length as isize, &mut len_trits);
@@ -131,11 +127,8 @@ where
     let security = iss::checksum_security(&hash);
     if security != 0 {
         let calculated_root: Vec<Trit> = {
-            let mut signature: Vec<Trit> = payload_iter
-                .by_ref()
-                .take(security * iss::KEY_LENGTH)
-                .cloned()
-                .collect();
+            let mut signature: Vec<Trit> = payload[pos..pos+(security as usize * iss::KEY_LENGTH)].to_vec();
+            pos += security as usize * iss::KEY_LENGTH;
 
             iss::digest_bundle_signature::<C>(&hash, &mut signature, curl1, curl2);
             curl1.reset();
@@ -146,8 +139,8 @@ where
 
 
             let siblings: Vec<Vec<Trit>> = {
-                let end_trits: Vec<Trit> = payload_iter.by_ref().cloned().collect();
-                let l = pascal::decode(&end_trits);
+                let end_trits = &payload[pos..];
+                let l = pascal::decode(end_trits);
                 end_trits[l.1..]
                     .chunks(HASH_LENGTH)
                     .take(l.0)
