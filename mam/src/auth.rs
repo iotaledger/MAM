@@ -21,11 +21,11 @@ where
     CB: Curl<BCTrit>,
     H: HammingNonce<Trit>,
 {
-    let mut message: Vec<Trit> = next.to_vec();
+    let mut message = next.to_vec();
     message.extend_from_slice(&message_in);
 
     let message_length = message.len() / TRITS_PER_TRYTE;
-    let mut message_nonce_space = vec![0; HASH_LENGTH];
+    let mut message_nonce_space = [0 as Trit; HASH_LENGTH];
     let nonce_len = H::search::<CT, CB>(
         &message,
         security,

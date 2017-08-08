@@ -28,7 +28,6 @@ pub fn mam_create(
 
     let mut c1 = CpuCurl::<Trit>::default();
     let mut c2 = CpuCurl::<Trit>::default();
-    let mut c3 = CpuCurl::<Trit>::default();
     let mut b1 = CpuCurl::<BCTrit>::default();
 
     let (masked_payload, root) = create::<CpuCurl<Trit>, CpuCurl<BCTrit>, CpuHam>(
@@ -42,7 +41,6 @@ pub fn mam_create(
         security,
         &mut c1,
         &mut c2,
-        &mut c3,
         &mut b1,
     );
 

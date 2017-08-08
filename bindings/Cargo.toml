@@ -24,6 +24,8 @@ iota-mam = { path = "../mam" }
 
 cty = { git = "https://github.com/japaric/cty.git" }
 
+[dependencies.iota-sign]
+git = "https://github.com/iotaledger/iota.rs"
 [dependencies.iota-trytes]
 git = "https://github.com/iotaledger/iota.rs"
 features = ["alloc"]

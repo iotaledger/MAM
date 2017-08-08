@@ -5,25 +5,20 @@ use alloc::string::String;
 use iota_trytes::*;
 use iota_merkle::*;
 use iota_curl_cpu::*;
+use iota_sign::iss;
 use util::c_str_to_static_slice;
 
 #[no_mangle]
-pub fn merkle_keys(c_seed: *const c_char, start: usize, count: usize, security: u8) -> *const u8 {
+pub fn merkle_key(c_seed: *const c_char, index: usize, security: u8) -> *const u8 {
     let seed_str = unsafe { c_str_to_static_slice(c_seed) };
     let seed: Vec<Trit> = seed_str.chars().flat_map(char_to_trits).cloned().collect();
 
     let mut curl = CpuCurl::<Trit>::default();
-    let keys = keys(&seed, start, count, security, &mut curl);
+    let mut key_space = [0 as Trit; iss::KEY_LENGTH];
+    key(&seed, index, security, &mut key_space, &mut curl);
 
-    let out_str = {
-        let s = keys.fold(String::new(), |mut acc, key| {
-            acc.push_str(trits_to_string(&key).unwrap().as_str());
-            acc.push('\n');
-            acc
-        });
-        s.trim();
-        s
-    };
+    let mut out_str = trits_to_string(&key_space).unwrap();
+    out_str.push('\0');
 
     let ptr = out_str.as_ptr();
     mem::forget(out_str);
