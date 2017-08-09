@@ -15,6 +15,7 @@ extern crate iota_merkle;
 extern crate iota_trytes;
 extern crate iota_curl_cpu;
 extern crate iota_curl;
+extern crate iota_sign;
 
 pub mod util;
 pub mod mam;
