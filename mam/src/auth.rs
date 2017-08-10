@@ -10,7 +10,7 @@ use core::slice;
 pub fn sign<CT, CB, H>(
     message_in: &[Trit],
     next: &[Trit],
-    key: &[Trit],
+    key_signature: &mut [Trit],
     hashes: &[Vec<Trit>],
     security: u8,
     tcurl: &mut CT,
@@ -39,13 +39,12 @@ where
     tcurl.reset();
     bcurl.reset();
 
-    let signature = {
+    {
         // we won't use BCurl anymore and we know
         // that BCurl memory size = 2*Curl
         let bundle: &mut [Trit] = unsafe {
             slice::from_raw_parts_mut(bcurl.state_mut().as_mut_ptr() as *mut Trit, HASH_LENGTH)
         };
-        let mut signature = vec![0; security as usize * iss::SIGNATURE_LENGTH];
         let mut len_trits = vec![0; num::min_trits(message_length as isize)];
         num::int2trits(message_length as isize, &mut len_trits);
 
@@ -56,12 +55,8 @@ where
         bundle.clone_from_slice(tcurl.rate());
         tcurl.reset();
 
-        signature[0..security as usize * iss::KEY_LENGTH]
-            .clone_from_slice(&key[0..security as usize * iss::KEY_LENGTH]);
-
-        iss::signature::<CT>(bundle, &mut signature, tcurl);
-        signature
-    };
+        iss::signature::<CT>(bundle, key_signature, tcurl);
+    }
 
     tcurl.reset();
     bcurl.reset();
@@ -71,7 +66,7 @@ where
         .chain(message.iter())
         .chain(pascal::encode(message_nonce.len() / TRITS_PER_TRYTE).iter())
         .chain(message_nonce.iter())
-        .chain(signature.iter())
+        .chain(key_signature.iter())
         .chain(pascal::encode(hashes.len()).iter())
         .chain(
             hashes
@@ -102,14 +97,14 @@ where
     let (message_length, message_length_end) = pascal::decode(&payload);
     let mut pos = message_length_end;
 
-    let message = &payload[pos..pos+(message_length * TRITS_PER_TRYTE)];
+    let message = &payload[pos..pos + (message_length * TRITS_PER_TRYTE)];
     pos += message_length * TRITS_PER_TRYTE;
     let nonce = {
         let t = &payload[pos..];
         let (l, e) = pascal::decode(&t);
         length = l * TRITS_PER_TRYTE;
         pos += e;
-        &payload[pos..pos+length]
+        &payload[pos..pos + length]
     };
 
     pos += length;
@@ -127,7 +122,8 @@ where
     let security = iss::checksum_security(&hash);
     if security != 0 {
         let calculated_root: Vec<Trit> = {
-            let mut signature: Vec<Trit> = payload[pos..pos+(security as usize * iss::KEY_LENGTH)].to_vec();
+            let mut signature: Vec<Trit> =
+                payload[pos..pos + (security as usize * iss::KEY_LENGTH)].to_vec();
             pos += security as usize * iss::KEY_LENGTH;
 
             iss::digest_bundle_signature::<C>(&hash, &mut signature, curl1, curl2);
