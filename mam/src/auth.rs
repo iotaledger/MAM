@@ -26,8 +26,13 @@ where
 
     let message_length = message.len() / TRITS_PER_TRYTE;
     let mut message_nonce_space = [0 as Trit; HASH_LENGTH];
+    {
+        let mut len = vec![0; num::min_trits(message_length as isize) as usize];
+        num::int2trits(message_length as isize, len.as_mut_slice());
+        tcurl.absorb(&len);
+    }
+    tcurl.absorb(&message);
     let nonce_len = H::search::<CT, CB>(
-        &message,
         security,
         TRITS_PER_TRYTE as usize,
         &mut message_nonce_space,
@@ -102,14 +107,14 @@ where
     let (message_length, message_length_end) = pascal::decode(&payload);
     let mut pos = message_length_end;
 
-    let message = &payload[pos..pos+(message_length * TRITS_PER_TRYTE)];
+    let message = &payload[pos..pos + (message_length * TRITS_PER_TRYTE)];
     pos += message_length * TRITS_PER_TRYTE;
     let nonce = {
         let t = &payload[pos..];
         let (l, e) = pascal::decode(&t);
         length = l * TRITS_PER_TRYTE;
         pos += e;
-        &payload[pos..pos+length]
+        &payload[pos..pos + length]
     };
 
     pos += length;
@@ -127,7 +132,8 @@ where
     let security = iss::checksum_security(&hash);
     if security != 0 {
         let calculated_root: Vec<Trit> = {
-            let mut signature: Vec<Trit> = payload[pos..pos+(security as usize * iss::KEY_LENGTH)].to_vec();
+            let mut signature: Vec<Trit> =
+                payload[pos..pos + (security as usize * iss::KEY_LENGTH)].to_vec();
             pos += security as usize * iss::KEY_LENGTH;
 
             iss::digest_bundle_signature::<C>(&hash, &mut signature, curl1, curl2);
