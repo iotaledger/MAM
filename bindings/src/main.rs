@@ -28,21 +28,25 @@ pub mod merkle;
 ]"]
 extern "C" {}
 
+
+#[cfg(any(target_os = "emscripten", target_arch = "wasm32"))]
+extern crate std;
+
 // These functions are used by the compiler, but not
 // for a bare-bones hello world. These are normally
 // provided by libstd.
-#[cfg(not(test))]
+#[cfg(not(any(test, target_os = "emscripten", target_arch = "wasm32")))]
 #[lang = "eh_personality"]
 #[no_mangle]
 pub extern "C" fn rust_eh_personality() {}
 
 // This function may be needed based on the compilation target.
-#[cfg(not(test))]
+#[cfg(not(any(test, target_os = "emscripten", target_arch = "wasm32")))]
 #[lang = "eh_unwind_resume"]
 #[no_mangle]
 pub extern "C" fn rust_eh_unwind_resume() {}
 
-#[cfg(not(test))]
+#[cfg(not(any(test, target_os = "emscripten", target_arch = "wasm32")))]
 #[lang = "panic_fmt"]
 #[no_mangle]
 pub extern "C" fn rust_begin_panic(
@@ -52,6 +56,8 @@ pub extern "C" fn rust_begin_panic(
 ) -> ! {
     unsafe { core::intrinsics::abort() }
 }
+
+
 
 #[start]
 pub fn main(_: isize, _: *const *const u8) -> isize {
