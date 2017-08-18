@@ -25,7 +25,6 @@ where
     message.extend_from_slice(&message_in);
 
     let message_length = message.len() / TRITS_PER_TRYTE;
-    let mut message_nonce_space = [0 as Trit; HASH_LENGTH];
     {
         let mut len = vec![0; num::min_trits(message_length as isize) as usize];
         num::int2trits(message_length as isize, len.as_mut_slice());
@@ -34,12 +33,12 @@ where
     tcurl.absorb(&message);
     let nonce_len = H::search::<CT, CB>(
         security,
-        TRITS_PER_TRYTE as usize,
-        &mut message_nonce_space,
+        0,
+        HASH_LENGTH,
         tcurl,
         bcurl,
     ).unwrap();
-    let message_nonce = &message_nonce_space[0..nonce_len];
+    let message_nonce = tcurl.rate()[0..nonce_len].to_vec();
 
     tcurl.reset();
     bcurl.reset();
