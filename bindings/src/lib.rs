@@ -1,6 +1,7 @@
 #![feature(alloc)]
 #![no_std]
 
+#[macro_use]
 extern crate alloc;
 
 extern crate cty;

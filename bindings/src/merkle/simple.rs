@@ -1,6 +1,6 @@
 use cty::*;
 use core::mem;
-use alloc::Vec;
+use alloc::*;
 use alloc::string::String;
 use iota_trytes::*;
 use iota_merkle::*;
@@ -35,13 +35,18 @@ pub fn merkle_siblings(c_addrs: *const c_char, index: usize) -> *const u8 {
         .collect();
 
     let mut curl = CpuCurl::<Trit>::default();
-    let siblings = siblings(&addrs, index, &mut curl);
 
-    let siblings_str = siblings.iter().fold(String::new(), |mut acc, sibling| {
-        acc.push_str(trits_to_string(sibling.as_slice()).unwrap().as_str());
-        acc.push('\n');
-        acc
-    });
+    let mut sibling_hashes = vec![0 as Trit; siblings_count(addrs.len()) * HASH_LENGTH];
+    siblings(&addrs, index, &mut sibling_hashes, &mut curl);
+
+    let siblings_str = sibling_hashes.chunks(HASH_LENGTH).fold(
+        String::new(),
+        |mut acc, sibling| {
+            acc.push_str(trits_to_string(&sibling).unwrap().as_str());
+            acc.push('\n');
+            acc
+        },
+    );
 
     siblings_str.trim();
     let ptr = siblings_str.as_ptr();
@@ -56,9 +61,9 @@ pub fn merkle_root(c_addr: *const c_char, c_siblings: *const c_char, index: usiz
     let addr: Vec<Trit> = addr_str.chars().flat_map(char_to_trits).cloned().collect();
 
     let siblings_str = unsafe { c_str_to_static_slice(c_siblings) };
-    let siblings: Vec<Vec<Trit>> = siblings_str
+    let siblings: Vec<Trit> = siblings_str
         .split("\n")
-        .map(|a| a.chars().flat_map(char_to_trits).cloned().collect())
+        .flat_map(|a| a.chars().flat_map(char_to_trits).cloned().collect::<Vec<Trit>>())
         .collect();
 
     let mut curl = CpuCurl::<Trit>::default();

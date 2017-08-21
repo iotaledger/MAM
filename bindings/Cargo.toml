@@ -6,7 +6,7 @@ keywords = ["no_std"]
 
 [lib]
 path = "src/lib.rs"
-cratetype = ["rlib"]
+crate-type = ["rlib"]
 
 [features]
 default = []
