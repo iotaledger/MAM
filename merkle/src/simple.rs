@@ -31,17 +31,10 @@ pub fn siblings_count(addr_count: usize) -> usize {
     usize_size - addr_count.leading_zeros() as usize
 }
 
-pub fn siblings<C: Curl<Trit>>(
-    addrs: &[Vec<Trit>],
-    index: usize,
-    out: &mut [Trit],
-    curl: &mut C,
-) {
+pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, out: &mut [Trit], curl: &mut C) {
     let hash_count = siblings_count(addrs.len());
 
     assert_eq!(out.len(), hash_count * HASH_LENGTH);
-
-    let mut hash_index = index ^ 0x1;
 
     const EMPTY: &'static [Trit; 243] = &[0 as Trit; 243];
 
@@ -63,35 +56,55 @@ pub fn siblings<C: Curl<Trit>>(
         curl: &mut C,
     ) {
         if idx * (1 << rank) > addrs.len() {
-            space.clone_from_slice(EMPTY);
+            space[rank * HASH_LENGTH..(rank + 1) * HASH_LENGTH].clone_from_slice(EMPTY);
         } else if rank == 0 {
-            space.clone_from_slice(addr_idx(addrs, idx));
+            space[..HASH_LENGTH].clone_from_slice(addr_idx(addrs, idx));
         } else if rank == 1 {
             curl.absorb(addr_idx(addrs, idx * 2));
             curl.absorb(addr_idx(addrs, idx * 2 + 1));
-            space.clone_from_slice(curl.rate());
+            space[rank * HASH_LENGTH..(rank + 1) * HASH_LENGTH].clone_from_slice(curl.rate());
             curl.reset();
         } else {
-            helper(rank - 1, idx * 2, addrs, space, curl);
-            let mut tmp: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
-            tmp.clone_from_slice(space);
-            helper(rank - 1, idx * 2 + 1, addrs, space, curl);
-            curl.absorb(&tmp);
-            curl.absorb(space);
-            space.clone_from_slice(curl.rate());
+            helper(
+                rank - 1,
+                idx * 2,
+                addrs,
+                &mut space[..rank * HASH_LENGTH],
+                curl,
+            );
+
+            {
+                let (a,b) = space.split_at_mut(rank*HASH_LENGTH);
+                b.clone_from_slice(&a[(rank-1)*HASH_LENGTH..]);
+            }
+
+            helper(
+                rank - 1,
+                idx * 2 + 1,
+                addrs,
+                &mut space[..rank * HASH_LENGTH],
+                curl,
+            );
+            curl.absorb(&space[rank * HASH_LENGTH..]);
+            curl.absorb(&space[(rank - 1) * HASH_LENGTH..rank * HASH_LENGTH]);
+            space[rank * HASH_LENGTH..].clone_from_slice(curl.rate());
             curl.reset();
         }
     };
 
-    for rank in 0..(hash_count) {
+    for rank in (0..hash_count).rev() {
+        let mut hash_index = index ^ 0x1;
+        for _ in 0..rank {
+            hash_index = (hash_index / 2) ^ 0x1;
+        }
+
         helper(
             rank,
             hash_index,
             addrs,
-            &mut out[rank * HASH_LENGTH..(rank + 1) * HASH_LENGTH],
+            &mut out[..(rank + 1) * HASH_LENGTH],
             curl,
         );
-        hash_index = (hash_index / 2) ^ 0x1;
     }
 }
 
@@ -176,8 +189,10 @@ mod tests {
                 "EDWVZSBDW9RPNICLFWSEEFASNIAWUHDWWQSHMMACGGCFIBVEEFJAAWHIEVAE9XNODNFUGFLDFESOINSEJ",
                 "EZQAGTTPSS9IRNYRBEXAPWMTQTPUKNQ9IUGFWVMJCKYYAFWWSMWNUCKENSBQLQFDMOEBVVXPPGCLXJYXQ",
             ];
-            let out_hashes: Vec<String> =
-                hashes.chunks(HASH_LENGTH).map(|h| trits_to_string(h).unwrap()).collect();
+            let out_hashes: Vec<String> = hashes
+                .chunks(HASH_LENGTH)
+                .map(|h| trits_to_string(h).unwrap())
+                .collect();
             assert_eq!(&ex_hashes, &out_hashes);
         }
 
@@ -207,8 +222,10 @@ mod tests {
                 "XALVXVGTHVKNSHLCKBTNYPYDTSGJUESBHXPPNTEZWLBPQDSTNOJHVZT99GSDJY9LNRWEWWLQQPOKQYRKD",
                 "IHTWSNXCMGYBVQYDLPENCHOVCZOBGNXYJJKQOHZOSLYSHIVNPVDERZFNYBXYGGXCKSOIFL9BQLJPXEPSK",
             ];
-            let out_hashes: Vec<String> =
-                hashes.chunks(HASH_LENGTH).map(|h| trits_to_string(h).unwrap()).collect();
+            let out_hashes: Vec<String> = hashes
+                .chunks(HASH_LENGTH)
+                .map(|h| trits_to_string(h).unwrap())
+                .collect();
             assert_eq!(&ex_hashes, &out_hashes);
         }
     }
