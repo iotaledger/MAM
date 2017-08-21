@@ -62,7 +62,9 @@ where
 
             addr
         };
-        let siblings = merkle::siblings(&addresses, index, curl1);
+
+        let mut siblings = vec![0 as Trit; merkle::siblings_count(addresses.len()) * HASH_LENGTH];
+        merkle::siblings(&addresses, index, &mut siblings, curl1);
         curl1.reset();
         let root = merkle::root(&addresses[index], &siblings, index, curl1);
         curl1.reset();
@@ -88,9 +90,13 @@ where
         };
         curl1.reset();
         curl2.reset();
+
+        let mut siblings = vec![0 as Trit; merkle::siblings_count(next_addrs.len()) * HASH_LENGTH];
+        merkle::siblings(&next_addrs, 0, &mut siblings, curl1);
+        curl1.reset();
         merkle::root(
             &next_addrs[0],
-            &merkle::siblings(&next_addrs, 0, curl2),
+            &siblings,
             0,
             curl1,
         )

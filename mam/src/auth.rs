@@ -11,7 +11,7 @@ pub fn sign<CT, CB, H>(
     message_in: &[Trit],
     next: &[Trit],
     key: &[Trit],
-    hashes: &[Vec<Trit>],
+    hashes: &[Trit],
     security: u8,
     tcurl: &mut CT,
     bcurl: &mut CB,
@@ -76,11 +76,12 @@ where
         .chain(pascal::encode(message_nonce.len() / TRITS_PER_TRYTE).iter())
         .chain(message_nonce.iter())
         .chain(signature.iter())
-        .chain(pascal::encode(hashes.len()).iter())
+        .chain(pascal::encode(hashes.len() / HASH_LENGTH).iter())
         .chain(
             hashes
+                .chunks(HASH_LENGTH)
                 .into_iter()
-                .fold(Vec::with_capacity(hashes.len() * HASH_LENGTH), |mut acc,
+                .fold(Vec::with_capacity(hashes.len()), |mut acc,
                  v| {
                     acc.extend(v);
                     acc
@@ -143,13 +144,13 @@ where
             curl1.reset();
 
 
-            let siblings: Vec<Vec<Trit>> = {
+            let siblings: Vec<Trit> = {
                 let end_trits = &payload[pos..];
                 let l = pascal::decode(end_trits);
                 end_trits[l.1..]
-                    .chunks(HASH_LENGTH)
-                    .take(l.0)
-                    .map(|c| c.to_vec())
+                    .iter()
+                    .take(l.0 * HASH_LENGTH)
+                    .cloned()
                     .collect()
             };
             merkle::root::<C>(&signature[..iss::ADDRESS_LENGTH], &siblings, index, curl1)

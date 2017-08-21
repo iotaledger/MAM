@@ -5,7 +5,13 @@ use sign::iss;
 use core::mem;
 use alloc::*;
 
-pub fn key<C: Curl<Trit>>(seed: &[Trit], index: usize, security: u8, out: &mut [Trit], curl: &mut C) {
+pub fn key<C: Curl<Trit>>(
+    seed: &[Trit],
+    index: usize,
+    security: u8,
+    out: &mut [Trit],
+    curl: &mut C,
+) {
     let mut subseed = [0; HASH_LENGTH];
 
     subseed[0..HASH_LENGTH].clone_from_slice(&seed);
@@ -18,46 +24,80 @@ pub fn key<C: Curl<Trit>>(seed: &[Trit], index: usize, security: u8, out: &mut [
     iss::key::<Trit, C>(out, security, curl);
 }
 
-pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, curl: &mut C) -> Vec<Vec<Trit>> {
+#[inline]
+pub fn siblings_count(addr_count: usize) -> usize {
     let usize_size = mem::size_of::<usize>() * 8;
-    let hash_count = usize_size - index.leading_zeros() as usize;
+    // == ceil(log2(addrs.len()))
+    usize_size - addr_count.leading_zeros() as usize
+}
 
-    let mut out: Vec<Vec<Trit>> = Vec::with_capacity(hash_count);
-    let mut hash_index = if index & 1 == 0 { index + 1 } else { index - 1 };
-    let mut hashes: Vec<Vec<Trit>> = addrs.to_vec();
-    let mut length = hashes.len();
+pub fn siblings<C: Curl<Trit>>(
+    addrs: &[Vec<Trit>],
+    index: usize,
+    out: &mut [Trit],
+    curl: &mut C,
+) {
+    let hash_count = siblings_count(addrs.len());
 
-    while length > 1 {
-        if length & 1 == 1 {
-            hashes.push(vec![0; HASH_LENGTH]);
-            length += 1;
-        }
+    assert_eq!(out.len(), hash_count * HASH_LENGTH);
 
-        out.push(hashes[hash_index].clone());
-        hash_index = hash_index / 2;
-        if hash_index & 1 == 0 {
-            hash_index += 1;
+    let mut hash_index = index ^ 0x1;
+
+    const EMPTY: &'static [Trit; 243] = &[0 as Trit; 243];
+
+    #[inline]
+    fn addr_idx(addrs: &[Vec<Trit>], idx: usize) -> &[Trit] {
+        if idx >= addrs.len() {
+            EMPTY
         } else {
-            hash_index -= 1;
+            &addrs[idx]
         }
+    }
 
-        length /= 2;
-        for i in 0..length {
-            curl.absorb(&hashes[i * 2]);
-            curl.absorb(&hashes[i * 2 + 1]);
-
-            hashes[i] = curl.rate().to_vec();
+    #[inline]
+    fn helper<C: Curl<Trit>>(
+        rank: usize,
+        idx: usize,
+        addrs: &[Vec<Trit>],
+        space: &mut [Trit],
+        curl: &mut C,
+    ) {
+        if idx * (1 << rank) > addrs.len() {
+            space.clone_from_slice(EMPTY);
+        } else if rank == 0 {
+            space.clone_from_slice(addr_idx(addrs, idx));
+        } else if rank == 1 {
+            curl.absorb(addr_idx(addrs, idx * 2));
+            curl.absorb(addr_idx(addrs, idx * 2 + 1));
+            space.clone_from_slice(curl.rate());
+            curl.reset();
+        } else {
+            helper(rank - 1, idx * 2, addrs, space, curl);
+            let mut tmp: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+            tmp.clone_from_slice(space);
+            helper(rank - 1, idx * 2 + 1, addrs, space, curl);
+            curl.absorb(&tmp);
+            curl.absorb(space);
+            space.clone_from_slice(curl.rate());
             curl.reset();
         }
+    };
 
-        hashes.truncate(length);
+    for rank in 0..(hash_count) {
+        helper(
+            rank,
+            hash_index,
+            addrs,
+            &mut out[rank * HASH_LENGTH..(rank + 1) * HASH_LENGTH],
+            curl,
+        );
+        hash_index = (hash_index / 2) ^ 0x1;
     }
-    out
 }
 
 pub fn root<C: Curl<Trit>>(
     address: &[Trit],
-    hashes: &[Vec<Trit>],
+    hashes: &[Trit],
     index: usize,
     curl: &mut C,
 ) -> Vec<Trit> {
@@ -78,7 +118,7 @@ pub fn root<C: Curl<Trit>>(
         out.clone_from_slice(curl.rate());
     };
 
-    for hash in hashes {
+    for hash in hashes.chunks(HASH_LENGTH) {
         helper(&mut out, hash);
     }
 
@@ -90,6 +130,88 @@ mod tests {
     use super::*;
     use sign::iss;
     use curl_cpu::*;
+
+    #[test]
+    fn correct_siblings() {
+        let mut c1 = CpuCurl::<Trit>::default();
+        let mut c2 = CpuCurl::<Trit>::default();
+        let mut c3 = CpuCurl::<Trit>::default();
+
+        let index = 4;
+        let start = 3;
+        let mut count = 11;
+        let security = 1;
+
+        let seed: Vec<Trit> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
+                               ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
+                               ABCDEFGHIJKLMNOPQRSTUVWXYZ9"
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
+        let mut digest = vec![0; iss::DIGEST_LENGTH];
+        let mut key = [0 as Trit; iss::KEY_LENGTH];
+
+        {
+            let addresses: Vec<Vec<Trit>> = (start..(start + count))
+                .map(|idx| {
+                    super::key(&seed, idx, security, &mut key, &mut c1);
+                    iss::digest_key(&key, &mut digest, &mut c2, &mut c3);
+                    c2.reset();
+                    c3.reset();
+                    iss::address(&mut digest, &mut c2);
+                    c2.reset();
+
+                    digest[0..iss::ADDRESS_LENGTH].to_vec()
+                })
+                .collect();
+            c1.reset();
+
+            let mut hashes = vec![0 as Trit; siblings_count(addresses.len()) * HASH_LENGTH];
+            siblings(&addresses, index, &mut hashes, &mut c1);
+
+            let ex_hashes = vec![
+                "SLCYEUY9MAFEWLCWF9LTZNPYAIGIXGJKDSFGEAZDCVOUCSLSGVZOYIHUTW9VUCE9VJXCQLGZIRDHKLHIE",
+                "FFUBQXBR9FUVBVNTSZKKO9JNJHZFOEZZVJSDUIIQJUGXFZWXFWBQO9CYRIARXFOSNUPGCKUCRKAIKGOWC",
+                "EDWVZSBDW9RPNICLFWSEEFASNIAWUHDWWQSHMMACGGCFIBVEEFJAAWHIEVAE9XNODNFUGFLDFESOINSEJ",
+                "EZQAGTTPSS9IRNYRBEXAPWMTQTPUKNQ9IUGFWVMJCKYYAFWWSMWNUCKENSBQLQFDMOEBVVXPPGCLXJYXQ",
+            ];
+            let out_hashes: Vec<String> =
+                hashes.chunks(HASH_LENGTH).map(|h| trits_to_string(h).unwrap()).collect();
+            assert_eq!(&ex_hashes, &out_hashes);
+        }
+
+        count = 17;
+        {
+            let addresses: Vec<Vec<Trit>> = (start..(start + count))
+                .map(|idx| {
+                    super::key(&seed, idx, security, &mut key, &mut c1);
+                    iss::digest_key(&key, &mut digest, &mut c2, &mut c3);
+                    c2.reset();
+                    c3.reset();
+                    iss::address(&mut digest, &mut c2);
+                    c2.reset();
+
+                    digest[0..iss::ADDRESS_LENGTH].to_vec()
+                })
+                .collect();
+
+            c1.reset();
+            let mut hashes = vec![0 as Trit; siblings_count(addresses.len()) * HASH_LENGTH];
+            siblings(&addresses, 0, &mut hashes, &mut c1);
+
+            let ex_hashes = vec![
+                "YZWDXCFFFFUIRNOZSNQEIQPVIIKRUNNONBWOJQBAJYNWFFEP9BGWF9OCUPHDHIXCY9IYW9LTKIVFZUOWF",
+                "HTCECMIQNWZJFCLHZ9VUJLPBMK99QIKOIZDUIEWOMJKKGT9NHNOGXCTIXOLQEV99XHAKPHCRTVFBLMNDP",
+                "N9VWIEOYEJILHRFLZHZETQSXJPULQYHLRQTPZGZZFBHGKENRKAIIZEATOCHLNAZEWRFCUPVLHEMGGSVZZ",
+                "XALVXVGTHVKNSHLCKBTNYPYDTSGJUESBHXPPNTEZWLBPQDSTNOJHVZT99GSDJY9LNRWEWWLQQPOKQYRKD",
+                "IHTWSNXCMGYBVQYDLPENCHOVCZOBGNXYJJKQOHZOSLYSHIVNPVDERZFNYBXYGGXCKSOIFL9BQLJPXEPSK",
+            ];
+            let out_hashes: Vec<String> =
+                hashes.chunks(HASH_LENGTH).map(|h| trits_to_string(h).unwrap()).collect();
+            assert_eq!(&ex_hashes, &out_hashes);
+        }
+    }
     #[test]
     fn it_does_not_panic() {
         let seed: Vec<Trit> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
