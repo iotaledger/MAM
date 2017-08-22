@@ -4,6 +4,8 @@ pub enum MamError {
     InvalidHash,
     /// Signature did not match expected root
     InvalidSignature,
+    /// Array was too short
+    ArrayOutOfBounds,
     /// Custom error
     CustomError(String),
 }
