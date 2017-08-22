@@ -10,6 +10,34 @@ use iota_curl_cpu::*;
 use util::c_str_to_static_slice;
 
 #[no_mangle]
+pub fn mam_key(c_key: *const c_char, index: usize) -> *const u8 {
+    let key_str = unsafe { c_str_to_static_slice(c_key) };
+    let key: Vec<Trit> = key_str.chars().flat_map(char_to_trits).cloned().collect();
+    let mut out: Vec<Trit> = Vec::with_capacity(key.len() + num::min_trits(index as isize));
+    let end = message_key(&key, &mut out, index).ok().unwrap();
+    let out_str = trits_to_string(&out[..end]).unwrap();
+    let ptr = out_str.as_ptr();
+    mem::forget(out_str);
+
+    ptr
+}
+
+#[no_mangle]
+pub fn mam_id(c_key: *const c_char, index: usize) -> *const u8 {
+    let key_str = unsafe { c_str_to_static_slice(c_key) };
+    let key: Vec<Trit> = key_str.chars().flat_map(char_to_trits).cloned().collect();
+    let mut out: Vec<Trit> = Vec::with_capacity(key.len() + num::min_trits(index as isize));
+    let end = message_key(&key, &mut out, index).ok().unwrap();
+    let mut c1 = CpuCurl::<Trit>::default();
+    message_id(&mut out[..end], &mut c1);
+    let out_str = trits_to_string(&out[..HASH_LENGTH]).unwrap();
+    let ptr = out_str.as_ptr();
+    mem::forget(out_str);
+
+    ptr
+}
+
+#[no_mangle]
 pub fn mam_create(
     c_seed: *const c_char,
     c_message: *const c_char,

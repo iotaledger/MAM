@@ -7,17 +7,14 @@ use auth::*;
 use mask::*;
 use errors::*;
 
-pub fn message_key<C: Curl<Trit>>(
-    key: &mut [T],
-    index: usize,
-    start: usize,
-) -> Result<usize, MamError> {
+pub fn message_key(key: &[Trit], out: &mut [Trit], index: usize) -> Result<usize, MamError> {
     let mut index_trits = num::min_trits(index as isize);
-    if key.len() < start + index_trits {
+    if out.len() < key.len() + index_trits {
         Err(MamError::ArrayOutOfBounds)
     } else {
-        num::int2trits(index as isize, &mut key[start..index_trits]);
-        Ok(start + index_trits)
+        out[..key.len()].clone_from_slice(&key);
+        num::int2trits(index as isize, &mut out[key.len()..index_trits]);
+        Ok(key.len() + index_trits)
     }
 }
 
@@ -25,16 +22,16 @@ pub fn message_key<C: Curl<Trit>>(
 /// for a mam, the key should consist of the merkle root and
 /// an initialization vector, which is the index of the key  in the
 /// merkle tree being used
-pub fn message_id<T, C>(key: &[T], out: &mut [T], curl: &mut C)
+pub fn message_id<T, C>(key: &mut [T], curl: &mut C)
 where
     T: Copy + Clone + Sized,
     C: Curl<T>,
 {
     curl.absorb(key);
-    out[..HASH_LENGTH].clone_from_slice(&curl.rate());
+    key[..HASH_LENGTH].clone_from_slice(&curl.rate());
     curl.reset();
-    curl.absorb(out[..HASH_LENGTH]);
-    out[..HASH_LENGTH].clone_from_slice(&curl.rate());
+    curl.absorb(&key[..HASH_LENGTH]);
+    key[..HASH_LENGTH].clone_from_slice(&curl.rate());
 }
 
 pub fn create<C, CB, H>(
