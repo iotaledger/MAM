@@ -7,18 +7,34 @@ use auth::*;
 use mask::*;
 use errors::*;
 
-pub fn message_id<T, C>(keys: &[Vec<T>], curl: &mut C) -> Vec<T>
+pub fn message_key<C: Curl<Trit>>(
+    key: &mut [T],
+    index: usize,
+    start: usize,
+) -> Result<usize, MamError> {
+    let mut index_trits = num::min_trits(index as isize);
+    if key.len() < start + index_trits {
+        Err(MamError::ArrayOutOfBounds)
+    } else {
+        num::int2trits(index as isize, &mut key[start..index_trits]);
+        Ok(start + index_trits)
+    }
+}
+
+/// generates the address for a given mam `key`
+/// for a mam, the key should consist of the merkle root and
+/// an initialization vector, which is the index of the key  in the
+/// merkle tree being used
+pub fn message_id<T, C>(key: &[T], out: &mut [T], curl: &mut C)
 where
     T: Copy + Clone + Sized,
     C: Curl<T>,
 {
-    for key in keys {
-        curl.absorb(key.as_slice());
-    }
-    let mask = curl.rate().to_vec();
+    curl.absorb(key);
+    out[..HASH_LENGTH].clone_from_slice(&curl.rate());
     curl.reset();
-    curl.absorb(&mask);
-    curl.rate().to_vec()
+    curl.absorb(out[..HASH_LENGTH]);
+    out[..HASH_LENGTH].clone_from_slice(&curl.rate());
 }
 
 pub fn create<C, CB, H>(
@@ -99,7 +115,7 @@ where
     curl1.reset();
     curl2.reset();
 
-    merkle::key(seed, start+index, security, &mut key, curl1);
+    merkle::key(seed, start + index, security, &mut key, curl1);
     curl1.reset();
     let mut payload = sign::<C, CB, H>(message, &next, &key, &siblings, security, curl1, bcurl);
 
