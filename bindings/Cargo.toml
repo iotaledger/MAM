@@ -6,16 +6,7 @@ keywords = ["no_std"]
 
 [lib]
 path = "src/lib.rs"
-test = true
-doc = true
-doctest = false
-
-[[bin]]
-name = "iota-mam"
-path = "src/main.rs"
-doc = false
-doctest = true
-test = false
+cratetype = ["rlib"]
 
 [features]
 default = []
