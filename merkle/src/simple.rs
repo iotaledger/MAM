@@ -31,19 +31,19 @@ pub fn siblings_count(addr_count: usize) -> usize {
     usize_size - addr_count.leading_zeros() as usize
 }
 
-pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, out: &mut [Trit], curl: &mut C) {
-    let hash_count = siblings_count(addrs.len());
+pub fn siblings<C: Curl<Trit>>(addrs: &[Trit], index: usize, out: &mut [Trit], curl: &mut C) {
+    let hash_count = siblings_count(addrs.len() / HASH_LENGTH);
 
     assert_eq!(out.len(), hash_count * HASH_LENGTH);
 
     const EMPTY: &'static [Trit; 243] = &[0 as Trit; 243];
 
     #[inline]
-    fn addr_idx(addrs: &[Vec<Trit>], idx: usize) -> &[Trit] {
-        if idx >= addrs.len() {
+    fn addr_idx(addrs: &[Trit], idx: usize) -> &[Trit] {
+        if idx >= addrs.len() / HASH_LENGTH {
             EMPTY
         } else {
-            &addrs[idx]
+            &addrs[idx * HASH_LENGTH..(idx + 1) * HASH_LENGTH]
         }
     }
 
@@ -51,11 +51,11 @@ pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, out: &mut [Tri
     fn helper<C: Curl<Trit>>(
         rank: usize,
         idx: usize,
-        addrs: &[Vec<Trit>],
+        addrs: &[Trit],
         space: &mut [Trit],
         curl: &mut C,
     ) {
-        if idx * (1 << rank) > addrs.len() {
+        if idx * (1 << rank) > addrs.len() / HASH_LENGTH {
             space[rank * HASH_LENGTH..(rank + 1) * HASH_LENGTH].clone_from_slice(EMPTY);
         } else if rank == 0 {
             space[..HASH_LENGTH].clone_from_slice(addr_idx(addrs, idx));
@@ -74,8 +74,8 @@ pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, out: &mut [Tri
             );
 
             {
-                let (a,b) = space.split_at_mut(rank*HASH_LENGTH);
-                b.clone_from_slice(&a[(rank-1)*HASH_LENGTH..]);
+                let (a, b) = space.split_at_mut(rank * HASH_LENGTH);
+                b.clone_from_slice(&a[(rank - 1) * HASH_LENGTH..]);
             }
 
             helper(
@@ -166,21 +166,20 @@ mod tests {
         let mut key = [0 as Trit; iss::KEY_LENGTH];
 
         {
-            let addresses: Vec<Vec<Trit>> = (start..(start + count))
-                .map(|idx| {
-                    super::key(&seed, idx, security, &mut key, &mut c1);
-                    iss::digest_key(&key, &mut digest, &mut c2, &mut c3);
-                    c2.reset();
-                    c3.reset();
-                    iss::address(&mut digest, &mut c2);
-                    c2.reset();
-
-                    digest[0..iss::ADDRESS_LENGTH].to_vec()
-                })
-                .collect();
+            let mut addresses: Vec<Trit> = Vec::with_capacity(count);
+            for idx in start..start + count {
+                super::key(&seed, idx, security, &mut key, &mut c1);
+                iss::digest_key(&key, &mut digest, &mut c2, &mut c3);
+                c2.reset();
+                c3.reset();
+                iss::address(&mut digest, &mut c2);
+                c2.reset();
+                addresses.extend(&digest[0..iss::ADDRESS_LENGTH]);
+            }
             c1.reset();
 
-            let mut hashes = vec![0 as Trit; siblings_count(addresses.len()) * HASH_LENGTH];
+            let mut hashes =
+                vec![0 as Trit; siblings_count(addresses.len() / HASH_LENGTH) * HASH_LENGTH];
             siblings(&addresses, index, &mut hashes, &mut c1);
 
             let ex_hashes = vec![
@@ -198,7 +197,7 @@ mod tests {
 
         count = 17;
         {
-            let addresses: Vec<Vec<Trit>> = (start..(start + count))
+            let addresses: Vec<Trit> = (start..(start + count))
                 .map(|idx| {
                     super::key(&seed, idx, security, &mut key, &mut c1);
                     iss::digest_key(&key, &mut digest, &mut c2, &mut c3);
@@ -209,10 +208,14 @@ mod tests {
 
                     digest[0..iss::ADDRESS_LENGTH].to_vec()
                 })
-                .collect();
+                .fold(Vec::with_capacity(count * HASH_LENGTH), |mut acc, x| {
+                    acc.extend(x);
+                    acc
+                });
 
             c1.reset();
-            let mut hashes = vec![0 as Trit; siblings_count(addresses.len()) * HASH_LENGTH];
+            let mut hashes =
+                vec![0 as Trit; siblings_count(addresses.len() / HASH_LENGTH) * HASH_LENGTH];
             siblings(&addresses, 0, &mut hashes, &mut c1);
 
             let ex_hashes = vec![
