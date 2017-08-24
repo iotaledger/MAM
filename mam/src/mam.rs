@@ -40,7 +40,7 @@ where
     H: HammingNonce<Trit>,
 {
     // generate the key and the get the merkle tree hashes
-    let mut key = [0 as Trit; iss::KEY_LENGTH];
+    let mut key = vec![0 as Trit; security as usize * iss::KEY_LENGTH];
     let (siblings, root) = {
         let mut digest = [0 as Trit; iss::DIGEST_LENGTH];
 
@@ -101,7 +101,7 @@ where
 
     merkle::key(seed, start+index, security, &mut key, curl1);
     curl1.reset();
-    let mut payload = sign::<C, CB, H>(message, &next, &key, &siblings, security, curl1, bcurl);
+    let mut payload = sign::<C, CB, H>(message, &next, &mut key, &siblings, security, curl1, bcurl);
 
     {
         let mut index_trits = vec![0; num::min_trits(index as isize)];
