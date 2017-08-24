@@ -3,19 +3,18 @@ use alloc::*;
 use sign::iss;
 use merkle;
 use trytes::*;
+use tmath::*;
 use auth::*;
 use mask::*;
 use errors::*;
 
-pub fn message_key(key: &[Trit], out: &mut [Trit], index: usize) -> Result<usize, MamError> {
-    let mut index_trits = num::min_trits(index as isize);
-    if out.len() < key.len() + index_trits {
-        Err(MamError::ArrayOutOfBounds)
-    } else {
-        out[..key.len()].clone_from_slice(&key);
-        num::int2trits(index as isize, &mut out[key.len()..index_trits]);
-        Ok(key.len() + index_trits)
-    }
+/// generate the message key for a root and an index.
+/// It copies `root` to `key`, and adds `index` to it.
+pub fn message_key(root: &[Trit], index: usize, key: &mut [Trit]) -> Result<usize, MamError> {
+    assert!(root.len() >= HASH_LENGTH);
+    assert!(key.len() >= HASH_LENGTH);
+    key[..HASH_LENGTH].clone_from_slice(&root[..HASH_LENGTH]);
+    add_assign(&mut key[..HASH_LENGTH], index as isize);
 }
 
 /// generates the address for a given mam `key`
@@ -27,7 +26,7 @@ where
     T: Copy + Clone + Sized,
     C: Curl<T>,
 {
-    curl.absorb(key);
+    curl.absorb(&key[..HASH_LENGTH]);
     key[..HASH_LENGTH].clone_from_slice(&curl.rate());
     curl.reset();
     curl.absorb(&key[..HASH_LENGTH]);
