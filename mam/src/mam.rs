@@ -10,7 +10,7 @@ use errors::*;
 
 /// generate the message key for a root and an index.
 /// It copies `root` to `key`, and adds `index` to it.
-pub fn message_key(root: &[Trit], index: usize, key: &mut [Trit]) -> Result<usize, MamError> {
+pub fn message_key(root: &[Trit], index: usize, key: &mut [Trit]) {
     assert!(root.len() >= HASH_LENGTH);
     assert!(key.len() >= HASH_LENGTH);
     key[..HASH_LENGTH].clone_from_slice(&root[..HASH_LENGTH]);
@@ -56,8 +56,8 @@ where
     let (siblings, root) = {
         let mut digest = [0 as Trit; iss::DIGEST_LENGTH];
 
-        let addresses: Vec<Vec<Trit>> = {
-            let mut addr = Vec::new();
+        let addresses: Vec<Trit> = {
+            let mut addr = Vec::with_capacity(count * HASH_LENGTH);
             for i in start..(start + count) {
                 merkle::key(seed, i, security, &mut key, curl1);
                 curl1.reset();
@@ -67,7 +67,7 @@ where
                 curl2.reset();
                 iss::address::<Trit, C>(&mut digest, curl1);
                 curl1.reset();
-                addr.push(digest[..iss::ADDRESS_LENGTH].to_vec());
+                addr.extend(&digest[..iss::ADDRESS_LENGTH].to_vec());
             }
 
             curl1.reset();
@@ -78,15 +78,20 @@ where
         let mut siblings = vec![0 as Trit; merkle::siblings_count(addresses.len()) * HASH_LENGTH];
         merkle::siblings(&addresses, index, &mut siblings, curl1);
         curl1.reset();
-        let root = merkle::root(&addresses[index], &siblings, index, curl1);
+        let root = merkle::root(
+            &addresses[index * HASH_LENGTH..(index + 1) * HASH_LENGTH],
+            &siblings,
+            index,
+            curl1,
+        );
         curl1.reset();
         (siblings, root)
     };
 
     let next = {
         let mut digest = [0 as Trit; iss::DIGEST_LENGTH];
-        let next_addrs: Vec<Vec<Trit>> = {
-            let mut addr = Vec::new();
+        let next_addrs: Vec<Trit> = {
+            let mut addr = Vec::with_capacity(count * HASH_LENGTH);
             for i in next_start..(next_start + next_count) {
                 merkle::key(seed, i, security, &mut key, curl1);
                 curl1.reset();
@@ -96,7 +101,7 @@ where
                 curl2.reset();
                 iss::address::<Trit, C>(&mut digest, curl1);
                 curl1.reset();
-                addr.push(digest[..iss::ADDRESS_LENGTH].to_vec());
+                addr.extend(&digest[..iss::ADDRESS_LENGTH].to_vec());
             }
             addr
         };
@@ -106,12 +111,7 @@ where
         let mut siblings = vec![0 as Trit; merkle::siblings_count(next_addrs.len()) * HASH_LENGTH];
         merkle::siblings(&next_addrs, 0, &mut siblings, curl1);
         curl1.reset();
-        merkle::root(
-            &next_addrs[0],
-            &siblings,
-            0,
-            curl1,
-        )
+        merkle::root(&next_addrs[0..HASH_LENGTH], &siblings, 0, curl1)
     };
 
     curl1.reset();

@@ -29,10 +29,10 @@ pub fn merkle_key(c_seed: *const c_char, index: usize, security: u8) -> *const u
 #[no_mangle]
 pub fn merkle_siblings(c_addrs: *const c_char, index: usize) -> *const u8 {
     let addrs_str = unsafe { c_str_to_static_slice(c_addrs) };
-    let addrs: Vec<Vec<Trit>> = addrs_str
-        .split("\n")
-        .map(|a| a.chars().flat_map(char_to_trits).cloned().collect())
-        .collect();
+    let addrs: Vec<Trit> = addrs_str.split("\n").fold(Vec::new(), |mut acc, a| {
+        acc.extend(a.chars().flat_map(char_to_trits).cloned());
+        acc
+    });
 
     let mut curl = CpuCurl::<Trit>::default();
 
@@ -63,7 +63,12 @@ pub fn merkle_root(c_addr: *const c_char, c_siblings: *const c_char, index: usiz
     let siblings_str = unsafe { c_str_to_static_slice(c_siblings) };
     let siblings: Vec<Trit> = siblings_str
         .split("\n")
-        .flat_map(|a| a.chars().flat_map(char_to_trits).cloned().collect::<Vec<Trit>>())
+        .flat_map(|a| {
+            a.chars()
+                .flat_map(char_to_trits)
+                .cloned()
+                .collect::<Vec<Trit>>()
+        })
         .collect();
 
     let mut curl = CpuCurl::<Trit>::default();
