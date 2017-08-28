@@ -2,13 +2,11 @@ use trytes::*;
 use tmath::*;
 use curl::*;
 
-pub fn mask<C>(payload: &mut [Trit], keys: &[&[Trit]], curl: &mut C)
+pub fn mask<C>(payload: &mut [Trit], key: &[Trit], curl: &mut C)
 where
     C: Curl<Trit>,
 {
-    for key in keys {
-        curl.absorb(&key);
-    }
+    curl.absorb(key);
     let mut key_chunk: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
     curl.squeeze(&mut key_chunk);
     for chunk in payload.chunks_mut(HASH_LENGTH) {
@@ -22,14 +20,11 @@ where
     }
 }
 
-pub fn unmask<C>(payload: &mut [Trit], keys: &[&[Trit]], curl: &mut C)
+pub fn unmask<C>(payload: &mut [Trit], key: &[Trit], curl: &mut C)
 where
     C: Curl<Trit>,
 {
-    for key in keys {
-        curl.absorb(&key);
-    }
-
+    curl.absorb(key);
     let mut key_chunk: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
     curl.squeeze(&mut key_chunk);
     for chunk in payload.chunks_mut(HASH_LENGTH) {
@@ -62,13 +57,10 @@ mod tests {
             .flat_map(char_to_trits)
             .cloned()
             .collect();
-        let index: Vec<Trit> = "AEOWJID999999"
-            .chars()
-            .flat_map(char_to_trits)
-            .cloned()
-            .collect();
+        let index: usize = 5;
         let mut curl = CpuCurl::<Trit>::default();
-        let keys: Vec<&[Trit]> = vec![&auth_id, &index];
+        let mut keys: Vec<Trit> = auth_id.clone(); // vec![&auth_id, &index];
+        add_assign(&mut keys, index as isize);
         let mut cipher = payload.clone();
         mask::<CpuCurl<Trit>>(&mut cipher, &keys, &mut curl);
         curl.reset();

@@ -11,10 +11,13 @@ use errors::*;
 /// generate the message key for a root and an index.
 /// It copies `root` to `key`, and adds `index` to it.
 pub fn message_key(root: &[Trit], index: usize, key: &mut [Trit]) -> Result<usize, MamError> {
-    assert!(root.len() >= HASH_LENGTH);
-    assert!(key.len() >= HASH_LENGTH);
-    key[..HASH_LENGTH].clone_from_slice(&root[..HASH_LENGTH]);
-    add_assign(&mut key[..HASH_LENGTH], index as isize);
+    if key.len() < root.len() {
+        Err(MamError::ArrayOutOfBounds)
+    } else {
+        key.clone_from_slice(root);
+        add_assign(&mut key[..HASH_LENGTH], index as isize);
+        Ok(key.len())
+    }
 }
 
 /// generates the address for a given mam `key`
@@ -106,12 +109,7 @@ where
         let mut siblings = vec![0 as Trit; merkle::siblings_count(next_addrs.len()) * HASH_LENGTH];
         merkle::siblings(&next_addrs, 0, &mut siblings, curl1);
         curl1.reset();
-        merkle::root(
-            &next_addrs[0],
-            &siblings,
-            0,
-            curl1,
-        )
+        merkle::root(&next_addrs[0], &siblings, 0, curl1)
     };
 
     curl1.reset();
@@ -122,9 +120,12 @@ where
     let mut payload = sign::<C, CB, H>(message, &next, &key, &siblings, security, curl1, bcurl);
 
     {
-        let mut index_trits = vec![0; num::min_trits(index as isize)];
-        num::int2trits(index as isize, &mut index_trits);
-        let channel_key: [&[Trit]; 2] = [&root, &index_trits];
+        // generate the message key for a root and an index.
+        let mut channel_key: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+        // It copies `root` to `channel_key`
+        channel_key.clone_from_slice(&root[..HASH_LENGTH]);
+        // add `index` to it.
+        add_assign(&mut channel_key, index as isize);
         mask::<C>(&mut payload, &channel_key, curl2);
     }
     (payload, root)
@@ -140,9 +141,9 @@ pub fn parse<C>(
 where
     C: Curl<Trit>,
 {
-    let mut index_trits = vec![0; num::min_trits(index as isize)];
-    num::int2trits(index as isize, &mut index_trits);
-    let channel_key: [&[Trit]; 2] = [&root, &index_trits];
+    let mut channel_key: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+    channel_key.clone_from_slice(&root[..HASH_LENGTH]);
+    add_assign(&mut channel_key, index as isize);
     let mut unmasked_payload = payload.to_vec();
     unmask::<C>(&mut unmasked_payload, &channel_key, curl1);
 
