@@ -63,7 +63,12 @@ pub fn merkle_root(c_addr: *const c_char, c_siblings: *const c_char, index: usiz
     let siblings_str = unsafe { c_str_to_static_slice(c_siblings) };
     let siblings: Vec<Trit> = siblings_str
         .split("\n")
-        .flat_map(|a| a.chars().flat_map(char_to_trits).cloned().collect::<Vec<Trit>>())
+        .flat_map(|a| {
+            a.chars()
+                .flat_map(char_to_trits)
+                .cloned()
+                .collect::<Vec<Trit>>()
+        })
         .collect();
 
     let mut curl = CpuCurl::<Trit>::default();
