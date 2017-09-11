@@ -31,13 +31,7 @@ where
         tcurl.absorb(&len);
     }
     tcurl.absorb(&message);
-    let nonce_len = H::search::<CT, CB>(
-        security,
-        0,
-        HASH_LENGTH,
-        tcurl,
-        bcurl,
-    ).unwrap();
+    let nonce_len = H::search::<CT, CB>(security, 0, HASH_LENGTH, tcurl, bcurl).unwrap();
     let message_nonce = tcurl.rate()[0..nonce_len].to_vec();
 
     tcurl.reset();
@@ -81,8 +75,7 @@ where
             hashes
                 .chunks(HASH_LENGTH)
                 .into_iter()
-                .fold(Vec::with_capacity(hashes.len()), |mut acc,
-                 v| {
+                .fold(Vec::with_capacity(hashes.len()), |mut acc, v| {
                     acc.extend(v);
                     acc
                 })
@@ -136,7 +129,7 @@ where
                 payload[pos..pos + (security as usize * iss::KEY_LENGTH)].to_vec();
             pos += security as usize * iss::KEY_LENGTH;
 
-            iss::digest_bundle_signature::<C>(&hash, &mut signature, curl1, curl2);
+            iss::digest_bundle_signature::<C>(&hash, &mut signature, curl1);
             curl1.reset();
             curl2.reset();
 

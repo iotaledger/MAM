@@ -74,8 +74,8 @@ pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, out: &mut [Tri
             );
 
             {
-                let (a,b) = space.split_at_mut(rank*HASH_LENGTH);
-                b.clone_from_slice(&a[(rank-1)*HASH_LENGTH..]);
+                let (a, b) = space.split_at_mut(rank * HASH_LENGTH);
+                b.clone_from_slice(&a[(rank - 1) * HASH_LENGTH..]);
             }
 
             helper(
@@ -108,34 +108,31 @@ pub fn siblings<C: Curl<Trit>>(addrs: &[Vec<Trit>], index: usize, out: &mut [Tri
     }
 }
 
-pub fn root<C: Curl<Trit>>(
-    address: &[Trit],
-    hashes: &[Trit],
-    index: usize,
-    curl: &mut C,
-) -> Vec<Trit> {
+pub fn root<C: Curl<Trit>>(address: &[Trit], hashes: &[Trit], index: usize, curl: &mut C) -> usize {
     let mut i = 1;
-
+    let mut num_before_end: usize = 0;
     let mut out = address.to_vec();
-    let mut helper = |out: &mut [Trit], hash: &[Trit]| {
+    let mut helper = |out: &mut [Trit], hash: &[Trit]| -> usize {
         curl.reset();
-        if i & index == 0 {
+        let end = if i & index == 0 {
             curl.absorb(&out);
             curl.absorb(&hash);
+            1
         } else {
             curl.absorb(&hash);
             curl.absorb(&out);
-        }
+            0
+        };
         i <<= 1;
 
         out.clone_from_slice(curl.rate());
+        end
     };
 
     for hash in hashes.chunks(HASH_LENGTH) {
-        helper(&mut out, hash);
+        num_before_end += helper(&mut out, hash);
     }
-
-    out
+    num_before_end
 }
 
 #[cfg(test)]
@@ -248,26 +245,5 @@ mod tests {
         let security = 1;
 
         let mut digest = vec![0; iss::DIGEST_LENGTH];
-        /*let addresses: Vec<Vec<Trit>> = keys(&seed, start, count, security, &mut c1)
-            .map(|k| {
-                iss::digest_key(&k, &mut digest, &mut c2, &mut c3);
-                c2.reset();
-                c3.reset();
-                iss::address(&mut digest, &mut c2);
-                c2.reset();
-
-                digest[0..iss::ADDRESS_LENGTH].to_vec()
-            })
-            .collect();
-        let hashes = siblings(&addresses, 0, &mut c1);
-        c1.reset();
-        let expect = root(&addresses[0], &hashes, 0, &mut c1);
-        for index in 0..count {
-            c1.reset();
-            let hashes = siblings(&addresses, index, &mut c1);
-            c1.reset();
-            let root = root(&addresses[index], &hashes, index, &mut c1);
-            assert_eq!(trits_to_string(&root), trits_to_string(&expect));
-        }*/
     }
 }
