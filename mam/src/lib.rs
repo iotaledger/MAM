@@ -1,12 +1,9 @@
 #![feature(alloc)]
 #![feature(const_fn)]
-//#![no_std]
+#![no_std]
 
 #[macro_use]
 extern crate alloc;
-
-//extern crate std;
-extern crate core;
 
 extern crate iota_trytes as trytes;
 extern crate iota_tmath as tmath;
@@ -20,7 +17,6 @@ extern crate iota_curl_cpu as curl_cpu;
 pub mod pascal;
 pub mod errors;
 pub mod mask;
-//pub mod auth;
 mod mam;
 
 pub use mam::*;

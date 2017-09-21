@@ -1,6 +1,5 @@
 [workspace]
 members = [
         "mam",
-        "merkle",
         "bindings",
         ]

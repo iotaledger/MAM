@@ -8,6 +8,14 @@ use mask::*;
 use errors::*;
 use pascal;
 
+const MESSAGE_NONCE_LENGTH: usize = HASH_LENGTH / 3;
+
+pub struct Message {
+    pub next: [Trit; HASH_LENGTH],
+    pub message: Vec<Trit>,
+}
+
+
 /// generate the message key for a root and an index.
 /// It copies `root` to `key`, and adds `index` to it.
 pub fn message_key<C: Curl<Trit>>(side_key: &[Trit], root: &[Trit], index: usize, curl: &mut C) {
@@ -22,7 +30,7 @@ pub fn message_key<C: Curl<Trit>>(side_key: &[Trit], root: &[Trit], index: usize
 /// for a mam, the key should consist of the merkle root and
 /// an initialization vector, which is the index of the key  in the
 /// merkle tree being used
-pub fn message_id<T, C>(curl: &mut C, key: &mut [T])
+pub fn message_id<T, C>(key: &mut [T], curl: &mut C)
 where
     T: Copy + Clone + Sized,
     C: Curl<T>,
@@ -34,6 +42,17 @@ where
     key[..HASH_LENGTH].clone_from_slice(&curl.rate());
 }
 
+/// Creates a signed, encrypted payload from a `message`,
+/// a `side_key`, which is used for encryption,
+/// a merkle `root` which used as an initialization vector for the encryption,
+/// the `next` merkle root which is copied to the message,
+/// the `start` index of the current merkle tree,
+/// the `index` relative to the tree of the key being used for signing,
+/// the `security` parameter, giving the size of the signature,
+/// a `curl` instance of Trit Curl for use in finding the hamming nonce and signing,
+/// a `encr_curl` instance of Trit Curl for use in encrypting the payload,
+/// and a `bcurl` instance of binary coded trits Curl for use in finding the hamming nonce
+/// Returns the signed, encrypted `payload`
 pub fn create<C, CB, H>(
     seed: &[Trit],
     message: &[Trit],
@@ -41,10 +60,11 @@ pub fn create<C, CB, H>(
     root: &[Trit],
     siblings: &[Trit],
     next: &[Trit],
-    start: usize,
+    start: isize,
     index: usize,
     security: u8,
-    sponge: &mut C,
+    curl: &mut C,
+    encr_curl: &mut C,
     bcurl: &mut CB,
 ) -> Vec<Trit>
 where
@@ -53,77 +73,65 @@ where
     H: HammingNonce<Trit>,
 {
     // generate the key and the get the merkle tree hashes
+    let message_length = next.len() + message.len();
+    let pascal_length = pascal::encoded_length(message_length);
+    let signature_length = security as usize * iss::KEY_LENGTH;
+    let branch_size = siblings.len() / HASH_LENGTH;
+    let siblings_pascal_length = pascal::encoded_length(branch_size);
+    let branch_length = branch_size * HASH_LENGTH;
+    let payload_min_length = pascal_length + message_length + MESSAGE_NONCE_LENGTH +
+        signature_length + siblings_pascal_length + branch_length;
     let mut key: Vec<Trit> = vec![0 as Trit; security as usize * iss::KEY_LENGTH];
-    let mut curl_bak: [Trit; STATE_LENGTH] = [0; STATE_LENGTH];
-    sponge.reset();
-
-    merkle::key(seed, start + index, security, &mut key, sponge);
-    sponge.reset();
-    message_key(side_key, root, index, sponge);
-    let mut payload: Vec<Trit> = Vec::new();
-    {
-        {
-            // add the pascal encoded message length ( and absorb it)
-            let message_length = next.len() + message.len();
-            let pascal_length = pascal::encoded_length(message_length);
-            let mut v: [Trit; 10] = [0; 10];
-            num::int2trits(message_length as isize, &mut v);
-            let nt = num::min_trits(message_length as isize);
-            let val = trits_to_string(&v);
-            payload.extend_from_slice(&pascal::encode(message_length));
-            sponge.absorb(&payload);
-            //not masking the length
-            //mask_slice(&mut payload, sponge);
-        }
-        let mut cursor = payload.len();
-        cursor = {
-            // add the next channel key and message, and mask it
-            payload.extend_from_slice(&next);
-            payload.extend_from_slice(&message);
-            let end = payload.len();
-            mask_slice(&mut payload[cursor..end], sponge);
-            end
-        };
-        cursor = {
-            // get the hamming nonce, append and mask it to payload
-            curl_bak.clone_from_slice(&sponge.state());
-            H::search(security, 0, HASH_LENGTH / 3, sponge, bcurl).unwrap();
-            payload.extend_from_slice(&sponge.rate()[..HASH_LENGTH / 3]);
-            let end = payload.len();
-            sponge.state_mut().clone_from_slice(&curl_bak);
-            mask_slice(&mut payload[cursor..end], sponge);
-            bcurl.reset();
-            end
-        };
-        curl_bak.clone_from_slice(&sponge.state());
-        sponge.reset();
-        iss::signature(&curl_bak[..HASH_LENGTH], &mut key, sponge);
-        sponge.state_mut().clone_from_slice(&curl_bak);
-        payload.extend_from_slice(&key);
-        payload.extend_from_slice(&pascal::encode(siblings.len() / HASH_LENGTH));
-        payload.extend_from_slice(&siblings);
+    message_key(side_key, &root, index, encr_curl);
+    let mut payload: Vec<Trit> = Vec::with_capacity(payload_min_length);
+    payload.extend_from_slice(&pascal::encode(message_length));
+    encr_curl.absorb(&payload);
+    let mut cursor = payload.len();
+    cursor = {
+        payload.extend_from_slice(&next);
+        payload.extend_from_slice(&message);
+        let payload_end = payload.len();
+        mask_slice(&mut payload[cursor..payload_end], encr_curl);
+        payload.len()
+    };
+    cursor = {
+        curl.state_mut().clone_from_slice(&encr_curl.state());
+        H::search(security, 0, HASH_LENGTH / 3, curl, bcurl).unwrap();
+        payload.extend_from_slice(&curl.rate()[..MESSAGE_NONCE_LENGTH]);
         let end = payload.len();
-        mask_slice(&mut payload[cursor..end], sponge);
-        sponge.reset();
-    }
+        mask_slice(&mut payload[cursor..end], encr_curl);
+        bcurl.reset();
+        curl.reset();
+        payload.len()
+    };
+
+    iss::subseed(seed, start + index as isize, &mut key[..HASH_LENGTH], curl);
+    curl.reset();
+    iss::key(&mut key, security, curl);
+    curl.reset();
+    iss::signature(&encr_curl.rate(), &mut key, curl);
+    curl.reset();
+
+    payload.extend_from_slice(&key);
+    payload.extend_from_slice(&pascal::encode(branch_size));
+    payload.extend_from_slice(&siblings);
+    mask_slice(&mut payload[cursor..], encr_curl);
+    encr_curl.reset();
     payload
 }
-enum UnmaskPascalStatus {
-    /// Message Hash did not have any hamming weight of zero
-    Searching,
-    /// Signature did not match expected root
-    Finalizing,
-    /// Array was too short
-    Done,
-}
 
+/// Parses an encrypted `payload`, first decrypting it with a
+/// `side_key` and the `root` and `index` as an initialization vector,
+/// and then checks that the signature is valid and
+/// with sibling hashes in the payload resolves to the merkle `root`
+/// Returns the `message` contained therein if valid, or a MamError if invalid
 pub fn parse<C>(
     payload: &[Trit],
     side_key: &[Trit],
     root: &[Trit],
     index: usize,
     sponge: &mut C,
-) -> Result<(Vec<Trit>, Vec<Trit>), MamError>
+) -> Result<Message, MamError>
 where
     C: Curl<Trit>,
 {
@@ -162,17 +170,22 @@ where
         pos += l.1;
         let sib_end = pos + l.0 * HASH_LENGTH;
         let siblings = &out[pos..sib_end];
-        let end = merkle::root(&hash, siblings, index, sponge);
+        merkle::root(&hash, siblings, index, sponge);
         hash.clone_from_slice(&sponge.rate());
-
         if hash.iter()
             .zip(root.iter())
             .take_while(|&(&a, &b)| a != b)
             .count() == 0
         {
-            let next_root: Vec<Trit> = out[..HASH_LENGTH].to_vec();
-            let message_out: Vec<Trit> = out[HASH_LENGTH..message_length].to_vec();
-            Ok((message_out, next_root))
+            let mut out_message = Message {
+                next: [0; HASH_LENGTH],
+                message: Vec::with_capacity(message_length),
+            };
+            out_message.next.clone_from_slice(&out[..HASH_LENGTH]);
+            out_message.message.extend_from_slice(
+                &out[HASH_LENGTH..message_length],
+            );
+            Ok(out_message)
         } else {
             Err(MamError::InvalidSignature)
         }
@@ -205,167 +218,81 @@ mod tests {
             .flat_map(char_to_trits)
             .cloned()
             .collect();
-        let security = 1;
-        let start = 1;
-        let count = 4;
-        let next_start = start + count;
+        let security: u8 = 1;
+        let start: isize = 1;
+        let count: usize = 4;
+        let next_start = start + count as isize;
         let next_count = 2;
         let index = 1;
 
         let mut c1 = CpuCurl::<Trit>::default();
         let mut c2 = CpuCurl::<Trit>::default();
+        let mut c3 = CpuCurl::<Trit>::default();
         let mut bc = CpuCurl::<BCTrit>::default();
 
-        let mut key: Vec<Trit> = vec![0 as Trit; security as usize * iss::KEY_LENGTH];
-        let (siblings, root) = {
-            let mut digest = [0 as Trit; iss::DIGEST_LENGTH];
+        let root = merkle::create(
+            &seed,
+            start,
+            count,
+            security as usize,
+            &mut c1,
+            &mut c2,
+            &mut c3,
+        );
+        let next_root = merkle::create(
+            &seed,
+            next_start,
+            next_count,
+            security as usize,
+            &mut c1,
+            &mut c2,
+            &mut c3,
+        );
+        let mut root_trits: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+        let mut next_root_trits: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+        match root {
+            merkle::MerkleTree::Node(_, hash, _) => root_trits.clone_from_slice(&hash),
+            _ => {}
+        }
+        match next_root {
+            merkle::MerkleTree::Node(_, hash, _) => next_root_trits.clone_from_slice(&hash),
+            _ => {}
+        }
 
-            let addresses: Vec<Vec<Trit>> = {
-                let mut addr = Vec::new();
-                for i in start..(start + count) {
-                    merkle::key(&seed, i, security, &mut key, &mut c1);
-                    c1.reset();
-
-                    iss::digest_key(&key, &mut digest, &mut c1, &mut c2);
-                    c1.reset();
-                    c2.reset();
-                    iss::address(&mut digest, &mut c1);
-                    c1.reset();
-                    addr.push(digest[..iss::ADDRESS_LENGTH].to_vec());
-                }
-
-                c1.reset();
-
-                addr
-            };
-
-            let mut siblings =
-                vec![0 as Trit; merkle::siblings_count(addresses.len()) * HASH_LENGTH];
-            merkle::siblings(&addresses, index, &mut siblings, &mut c1);
-            c1.reset();
-            merkle::root(&addresses[index], &siblings, index, &mut c1);
-            let root: Vec<Trit> = c1.rate().clone().to_vec();
-            c1.reset();
-            (siblings, root)
-        };
-
-        let next = {
-            let mut digest = [0 as Trit; iss::DIGEST_LENGTH];
-            let next_addrs: Vec<Vec<Trit>> = {
-                let mut addr = Vec::new();
-                for i in next_start..(next_start + next_count) {
-                    merkle::key(&seed, i, security, &mut key, &mut c1);
-                    c1.reset();
-
-                    iss::digest_key(&key, &mut digest, &mut c1, &mut c2);
-                    c1.reset();
-                    c2.reset();
-                    iss::address(&mut digest, &mut c1);
-                    c1.reset();
-                    addr.push(digest[..iss::ADDRESS_LENGTH].to_vec());
-                }
-                addr
-            };
-            c1.reset();
-            c2.reset();
-
-            let mut siblings =
-                vec![0 as Trit; merkle::siblings_count(next_addrs.len()) * HASH_LENGTH];
-            merkle::siblings(&next_addrs, 0, &mut siblings, &mut c1);
-            c1.reset();
-            merkle::root(&next_addrs[0], &siblings, 0, &mut c1);
-            let mut next_root: Vec<Trit> = c1.rate().clone().to_vec();
-            next_root
-        };
+        let branch = merkle::branch(&root, index);
+        let branch_size = merkle::len(&branch);
+        let branch_length = branch_size * HASH_LENGTH;
+        let mut siblings: Vec<Trit> = vec![0; branch_length];
+        merkle::write_branch(&branch, branch_length - HASH_LENGTH, &mut siblings);
 
         let masked_payload = create::<CpuCurl<Trit>, CpuCurl<BCTrit>, CpuHam>(
             &seed,
             &message,
             &side_key,
-            &root,
+            &root_trits,
             &siblings,
-            &next,
+            &next_root_trits,
             start,
             index,
             security,
             &mut c1,
+            &mut c2,
             &mut bc,
         );
-        c1.reset();
 
-        let mut out: Vec<Trit> = vec![0; masked_payload.len()];
-        let result = parse(&masked_payload, &side_key, &root, index, &mut c1)
-            .ok()
-            .unwrap();
-        assert_eq!(result.0, message);
-    }
-}
-/*
-        {
-            let mut pascals_length: Vec<Trit> = Vec::new();
-            let mut status: UnmaskPascalStatus = UnmaskPascalStatus::Searching;
-            let mut key_chunk: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
-            let mut num_encoders = 0;
-            let mut tryte_count = 0;
-            let mut pascal_end = 0;
-            key_chunk.clone_from_slice(&curl1.rate());
-            for chunk in out.chunks_mut(HASH_LENGTH) {
-                let len = chunk.len();
-                for i in 0..len {
-                    key_chunk[i] = trit_sum(chunk[i], -key_chunk[i]);
-                }
-                let end = match status {
-                    UnmaskPascalStatus::Searching => {
-                        for t in key_chunk.chunks(TRITS_PER_TRYTE) {
-                            if num::trits2int(t) > 0 {
-                                status = UnmaskPascalStatus::Finalizing;
-                                num_encoders = tryte_count / TRITS_PER_TRYTE;
-                                if tryte_count % 3 != 0 {
-                                    num_encoders += 1;
-                                }
-                                num_encoders *= 2;
-                                tryte_count += 1;
-                                tryte_count *= 3;
-                                tryte_count += num_encoders;
-                                break;
-                            }
-                            tryte_count += 1;
-                        }
-                        match num_encoders {
-                            0 => len,
-                            _ => {
-                                if tryte_count - pascal_end <= HASH_LENGTH {
-                                    tryte_count - pascal_end
-                                } else {
-                                    len
-                                }
-                            }
-                        }
-                    }
-                    UnmaskPascalStatus::Finalizing => {
-                        if num_encoders < HASH_LENGTH {
-                            status = UnmaskPascalStatus::Done;
-                            num_encoders
-                        } else {
-                            num_encoders -= HASH_LENGTH;
-                            len
-                        }
-                    }
-                    _ => 0,
-                };
-                pascal_end += end;
-
-                let k_str = trits_to_string(&chunk);
-                let n_str = trits_to_string(&key_chunk);
-                if end != 0 {
-                    chunk[..end].clone_from_slice(&key_chunk[..end]);
-                    curl1.absorb(&key_chunk[..end]);
-                    key_chunk[..len].clone_from_slice(&curl1.rate()[..len]);
-                }
-                if end != HASH_LENGTH {
-                    break;
+        match root {
+            merkle::MerkleTree::Node(_, hash, _) => root_trits.clone_from_slice(&hash),
+            _ => {}
+        }
+        match parse(&masked_payload, &side_key, &root_trits, index, &mut c1) {
+            Ok(result) => assert_eq!(result.message, message),
+            Err(e) => {
+                match e {
+                    MamError::InvalidSignature => assert!(false, "Invalid Signature"),
+                    MamError::InvalidHash => assert!(false, "Invalid Hash"),
+                    _ => assert!(false, "some other error!"),
                 }
             }
-            pascal::decode(&out[..pascal_end])
-        };
- */
+        }
+    }
+}

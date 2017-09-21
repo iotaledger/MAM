@@ -15,4 +15,3 @@ extern crate iota_sign;
 
 mod util;
 pub mod mam;
-pub mod merkle;
