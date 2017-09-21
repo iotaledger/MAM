@@ -19,7 +19,6 @@ where
         key_chunk[..len].clone_from_slice(&curl.rate()[..len]);
     }
 }
-
 pub fn unmask<C>(payload: &mut [Trit], key: &[Trit], curl: &mut C)
 where
     C: Curl<Trit>,
@@ -36,6 +35,33 @@ where
         chunk.clone_from_slice(&key_chunk[..len]);
         curl.absorb(&key_chunk[..len]);
         key_chunk[..len].clone_from_slice(&curl.rate()[..len]);
+    }
+}
+pub fn mask_slice<C>(payload: &mut [Trit], curl: &mut C)
+where
+    C: Curl<Trit>,
+{
+    let mut key_chunk: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+    key_chunk.clone_from_slice(curl.rate());
+    for chunk in payload.chunks_mut(HASH_LENGTH) {
+        curl.absorb(chunk);
+        let len = chunk.len();
+        for i in 0..len {
+            chunk[i] = trit_sum(chunk[i], key_chunk[i]);
+        }
+        key_chunk[..len].clone_from_slice(&curl.rate()[..len]);
+    }
+}
+
+pub fn unmask_slice<C>(payload: &mut [Trit], curl: &mut C)
+where
+    C: Curl<Trit>,
+{
+    for chunk in payload.chunks_mut(HASH_LENGTH) {
+        for i in 0..chunk.len() {
+            chunk[i] = trit_sum(chunk[i], -curl.rate()[i]);
+        }
+        curl.absorb(&chunk);
     }
 }
 

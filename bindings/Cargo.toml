@@ -8,15 +8,23 @@ keywords = ["no_std"]
 path = "src/lib.rs"
 crate-type = ["rlib"]
 
+[[bin]]
+name = "iota-mam"
+path = "src/main.rs"
+doc = false
+doctest = true
+test = false
+
 [features]
 default = []
 
 [dependencies]
-iota-merkle = { path = "../merkle" }
 iota-mam = { path = "../mam" }
 
 cty = { git = "https://github.com/japaric/cty.git" }
 
+[dependencies.iota-merkle]
+git = "https://github.com/iotaledger/iota.rs"
 [dependencies.iota-sign]
 git = "https://github.com/iotaledger/iota.rs"
 [dependencies.iota-trytes]

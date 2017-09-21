@@ -57,6 +57,19 @@ pub fn decode(input: &[Trit]) -> (usize, usize) {
     )
 }
 
+pub fn encoded_length(input: usize) -> usize {
+    let length = num::round_third(num::min_trits(input as isize) as usize);
+    let negative_length = (length - TRITS_PER_TRYTE) / TRITS_PER_TRYTE;
+    let triplet_count = negative_length / TRITS_PER_TRYTE +
+        if negative_length % TRITS_PER_TRYTE == 0 {
+            0
+        } else {
+            1
+        };
+    let encoder_trit_count = triplet_count * 2;
+    length + encoder_trit_count
+}
+
 pub fn encode(input: usize) -> Vec<Trit> {
     let length = num::round_third(num::min_trits(input as isize) as usize) as u8;
     let negative_length = (length as usize - TRITS_PER_TRYTE) / TRITS_PER_TRYTE;
