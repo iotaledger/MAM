@@ -1,4 +1,4 @@
-use cty::*;
+use alloc::boxed::Box;
 
 use core::mem;
 use core::ptr;
@@ -9,61 +9,32 @@ use iota_mam::*;
 use iota_curl_cpu::*;
 use iota_curl::*;
 
-use util::c_str_to_static_slice;
+use shared::ctrits::*;
+use shared::util::*;
 
 #[no_mangle]
 pub fn mam_create(
-    c_seed: *const c_char,
-    c_message: *const c_char,
-    c_key: *const c_char,
-    c_root: *const c_char,
-    c_siblings: *const c_char,
-    c_next_root: *const c_char,
+    seed: &CTrits,
+    message: &CTrits,
+    key: &CTrits,
+    root: &CTrits,
+    siblings: &CTrits,
+    next_root: &CTrits,
     start: isize,
     index: usize,
     security: u8,
-) -> *const u8 {
-    let seed: Vec<Trit> = {
-        let seed_str = unsafe { c_str_to_static_slice(c_seed) };
-        seed_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
-
-    let msg: Vec<Trit> = {
-        let msg_str = unsafe { c_str_to_static_slice(c_message) };
-        msg_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
-
-    let key: Vec<Trit> = {
-        let key_str = unsafe { c_str_to_static_slice(c_key) };
-        key_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
-
-    let root: Vec<Trit> = {
-        let root_str = unsafe { c_str_to_static_slice(c_root) };
-        root_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
-
-    let siblings: Vec<Trit> = {
-        let trit_str = unsafe { c_str_to_static_slice(c_siblings) };
-        trit_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
-
-    let next_root: Vec<Trit> = {
-        let trit_str = unsafe { c_str_to_static_slice(c_next_root) };
-        trit_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
-
+) -> *const CTrits {
     let mut c1 = CpuCurl::<Trit>::default();
     let mut c2 = CpuCurl::<Trit>::default();
     let mut b1 = CpuCurl::<BCTrit>::default();
 
     let masked_payload = create::<CpuCurl<Trit>, CpuCurl<BCTrit>, CpuHam>(
-        &seed,
-        &msg,
-        &key,
-        &root,
-        &siblings,
-        &next_root,
+        ctrits_slice_trits(seed),
+        ctrits_slice_trits(message),
+        ctrits_slice_trits(key),
+        ctrits_slice_trits(root),
+        ctrits_slice_trits(siblings),
+        ctrits_slice_trits(next_root),
         start,
         index,
         security,
@@ -72,49 +43,24 @@ pub fn mam_create(
         &mut b1,
     );
 
-    let out_str = trits_to_string(&masked_payload).unwrap();
-    let pointer = out_str.as_ptr();
-    mem::forget(out_str);
-
-    pointer
+    let out = Box::new(ctrits_from_trits(masked_payload));
+    Box::into_raw(out)
 }
 
 #[no_mangle]
-pub fn mam_parse(
-    c_payload: *const c_char,
-    c_key: *const c_char,
-    c_root: *const c_char,
-) -> *const u8 {
-
-    let payload: Vec<Trit> = {
-        let trits_str = unsafe { c_str_to_static_slice(c_payload) };
-        trits_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
-
-    let root: Vec<Trit> = {
-        let root_str = unsafe { c_str_to_static_slice(c_root) };
-        root_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
-
-    let side_key: Vec<Trit> = {
-        let key_str = unsafe { c_str_to_static_slice(c_key) };
-        key_str.chars().flat_map(char_to_trits).cloned().collect()
-    };
+pub fn mam_parse(payload: &CTrits, side_key: &CTrits, root: &CTrits) -> *const [*mut CTrits] {
 
     let mut c1 = CpuCurl::<Trit>::default();
-    //let mut c2 = CpuCurl::<Trit>::default();
+    let result = parse(
+        ctrits_slice_trits(payload),
+        ctrits_slice_trits(side_key),
+        ctrits_slice_trits(root),
+        &mut c1,
+    ).ok().unwrap();
 
-    match parse(&payload, &side_key, &root, &mut c1) {
-        Ok(result) => {
-            let mut out_str = trits_to_string(&result.message).unwrap();
-            out_str.push('\n');
-            out_str.push_str(&trits_to_string(&result.next).unwrap().as_str());
-            out_str.push('\0');
-            let pointer = out_str.as_ptr();
-            mem::forget(out_str);
+    let message = Box::new(ctrits_from_trits(result.message));
+    let next = Box::new(ctrits_from_trits(result.next.to_vec()));
 
-            pointer
-        }
-        _ => ptr::null(),
-    }
+    let out = vec![Box::into_raw(message), Box::into_raw(next)].into_boxed_slice();
+    Box::into_raw(out)
 }
