@@ -49,13 +49,6 @@ pub fn iota_mam_create(
 
 #[no_mangle]
 pub fn iota_mam_parse(payload: &CTrits, side_key: &CTrits, root: &CTrits) -> *mut [*mut CTrits; 2] {
-    println!(
-        "payload {:?} sk {:?} root {:?}",
-        payload.encoding,
-        side_key.encoding,
-        root.encoding
-    );
-
     let mut c1 = CpuCurl::<Trit>::default();
     let result = parse(
         ctrits_slice_trits(payload),
