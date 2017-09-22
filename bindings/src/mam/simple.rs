@@ -13,7 +13,7 @@ use shared::ctrits::*;
 use shared::util::*;
 
 #[no_mangle]
-pub fn mam_create(
+pub fn iota_mam_create(
     seed: &CTrits,
     message: &CTrits,
     key: &CTrits,
@@ -48,7 +48,7 @@ pub fn mam_create(
 }
 
 #[no_mangle]
-pub fn mam_parse(payload: &CTrits, side_key: &CTrits, root: &CTrits) -> *const [*mut CTrits] {
+pub fn iota_mam_parse(payload: &CTrits, side_key: &CTrits, root: &CTrits) -> *const [*mut CTrits] {
 
     let mut c1 = CpuCurl::<Trit>::default();
     let result = parse(
