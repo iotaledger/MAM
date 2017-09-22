@@ -14,7 +14,7 @@
 //!
 //! The inner structure of the resulting payload takes the form of:
 //!
-//! ```
+//! ```text
 //! [
 //!     Encoded Index,
 //!     Encoded Message Length,
