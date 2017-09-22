@@ -1,166 +1,169 @@
-use core::iter;
-
-use alloc::*;
 use trytes::constants::*;
 use trytes::num;
 
 const ENCODER_MASK: isize = 7;
+const TRITS_PER_PAIR: usize = 2;
+const ZERO: [Trit; 5] = [1, 0, 0, -1, -1];
 
-pub fn decode(input: &[Trit]) -> (usize, usize) {
-    let mut positive: Vec<Trit> = Vec::with_capacity(TRITS_PER_TRYTE);
-    let negative: Vec<Trit> = input
-        .chunks(TRITS_PER_TRYTE)
-        .take_while(|tryte| {
-            let val = num::trits2int(tryte);
-            if val.is_positive() {
-                positive.extend_from_slice(*tryte);
-                false
-            } else {
-                true
-            }
-        })
-        .flat_map(|t| t.to_vec())
-        .collect();
-    let encoders_start = negative.len() + positive.len();
-    let num_encoder_pairs = {
-        let num_negative_trytes = negative.len() / 3;
-        num_negative_trytes / 3 + if num_negative_trytes % 3 == 0 { 0 } else { 1 }
-    };
-    let encoders: Vec<isize> = input[encoders_start..]
-        .chunks(2)
-        .take(num_encoder_pairs)
-        .map(num::trits2int)
-        .collect();
-    let corrected_negatives: Vec<Trit> = negative
-        .chunks(TRITS_PER_TRYTE.pow(2))
-        .zip(encoders.iter())
-        .flat_map(|(trytes, e)| {
-            let mut i = 0;
-            let encoder = *e + TRITS_PER_TRYTE as isize;
-            let mut trytes_out: Vec<Trit> = Vec::with_capacity(trytes.len());
-            for tryte in trytes.chunks(TRITS_PER_TRYTE) {
-                if ((encoder >> i) & 1isize) != 0isize {
-                    let mut neg: Vec<Trit> = tryte.iter().map(|trit| -trit).collect();
-                    trytes_out.append(&mut neg);
+fn end(trits: &[Trit]) -> usize {
+    if num::trits2int(&trits[..TRITS_PER_TRYTE]).is_positive() {
+        TRITS_PER_TRYTE
+    } else {
+        TRITS_PER_TRYTE + end(&trits[TRITS_PER_TRYTE..])
+    }
+}
+
+pub fn decode(input: &[Trit]) -> (isize, usize) {
+    if &input[..5] == &ZERO {
+        (0, 5)
+    } else {
+        let encoders_start = end(input);
+        let num_encoder_pairs = {
+            let num_negative_trytes = encoders_start / TRITS_PER_TRYTE;
+            num_negative_trytes / TRITS_PER_TRYTE +
+                if num_negative_trytes % TRITS_PER_TRYTE == 0 {
+                    0
                 } else {
-                    trytes_out.extend_from_slice(tryte)
-                };
-                i += 1;
-            }
-            trytes_out.into_iter()
-        })
-        .chain(positive.into_iter())
-        .collect();
-    (
-        num::trits2int(&corrected_negatives) as usize,
-        encoders_start + num::round_third(num_encoder_pairs * 2),
-    )
+                    1
+                }
+        };
+        let mut i = 0;
+        (
+            input[encoders_start..]
+                .chunks(TRITS_PER_PAIR)
+                .take(num_encoder_pairs)
+                .map(num::trits2int)
+                .zip(input[..encoders_start].chunks(9))
+                .fold(0, |acc, (e, trytes)| {
+                    let encoder = e + TRITS_PER_TRYTE as isize;
+                    trytes.chunks(TRITS_PER_TRYTE).fold(acc, |out, tryte| {
+                        let ret = out as isize +
+                            27isize.pow(i) * num::trits2int(tryte) *
+                                if ((encoder >> i) & 1isize) != 0isize {
+                                    -1
+                                } else {
+                                    1
+                                };
+                        i += 1;
+                        ret
+                    })
+                }),
+            encoders_start + num_encoder_pairs * TRITS_PER_PAIR,
+        )
+    }
 }
 
-pub fn encoded_length(input: usize) -> usize {
-    let length = num::round_third(num::min_trits(input as isize) as usize);
-    let negative_length = (length - TRITS_PER_TRYTE) / TRITS_PER_TRYTE;
-    let triplet_count = negative_length / TRITS_PER_TRYTE +
-        if negative_length % TRITS_PER_TRYTE == 0 {
-            0
-        } else {
-            1
-        };
-    let encoder_trit_count = triplet_count * 2;
-    length + encoder_trit_count
+fn min_trits_helper(input: usize, base: usize) -> usize {
+    if input <= base {
+        1
+    } else {
+        1 + min_trits_helper(input, 1 + base * RADIX as usize)
+    }
 }
 
-pub fn encode(input: usize) -> Vec<Trit> {
-    let length = num::round_third(num::min_trits(input as isize) as usize) as u8;
-    let negative_length = (length as usize - TRITS_PER_TRYTE) / TRITS_PER_TRYTE;
-    let triplet_count = negative_length / TRITS_PER_TRYTE +
-        if negative_length % TRITS_PER_TRYTE == 0 {
-            0
-        } else {
-            1
-        };
-    let encoder_trit_count = triplet_count * 2;
-    let encoder_trits_size = num::round_third(encoder_trit_count);
-    let mut encoding = 0;
-    let mut trits: Vec<Trit> = {
-        let mut myvec = vec![0; length as usize];
-        num::int2trits(input as isize, &mut myvec);
+fn pascal_min_trits(input: usize) -> usize {
+    min_trits_helper(input, 1)
+}
 
-        {
-            let delta = myvec.capacity() - myvec.len();
-            if delta != 0 {
-                myvec.append(&mut iter::repeat(0 as Trit).take(delta).collect());
-            }
+fn write_trits(input: usize, out: &mut [Trit]) -> usize {
+    match input {
+        0 => 0,
+        _ => {
+            let mut abs = input / RADIX as usize;
+            out[0] = {
+                let mut r = input as isize % RADIX as isize;
+                if r > 1 {
+                    abs += 1;
+                    r = -1;
+                }
+                r as Trit
+            };
+            1 + write_trits(abs, &mut out[1..])
         }
+    }
+}
 
+fn int2trits(input: isize, out: &mut [Trit]) -> usize {
+    let end = write_trits(input.abs() as usize, out);
+    if input.is_negative() {
+        for t in out.iter_mut() {
+            *t = -*t;
+        }
+    }
+    end
+}
+
+fn trit_count(length: usize) -> usize {
+    match length {
+        0 => 1,
+        _ => length / TRITS_PER_TRYTE + if length % TRITS_PER_TRYTE == 0 { 0 } else { 1 },
+    }
+
+}
+
+fn number_of_flipped_trytes(input: isize, length: usize) -> usize {
+    (length -
+         if input.is_negative() {
+             0
+         } else {
+             TRITS_PER_TRYTE
+         })
+}
+
+pub fn encoded_length(input: isize) -> usize {
+    if input == 0 {
+        ZERO.len()
+    } else {
+        let length = num::round_third(pascal_min_trits(input.abs() as usize));
+        length + trit_count(length / TRITS_PER_TRYTE) * TRITS_PER_PAIR
+    }
+}
+
+pub fn encode(input: isize, out: &mut [Trit]) {
+    if input == 0 {
+        out.clone_from_slice(&ZERO);
+    } else {
+        let length = num::round_third(pascal_min_trits(input.abs() as usize));
+        let mut encoding = 0;
+        int2trits(input, out);
         let mut index = 0;
-        myvec
-            .chunks(TRITS_PER_TRYTE)
-            .map(|c| {
-                let val = num::trits2int(c);
-                let out = if val.is_positive() && index < negative_length {
-                    encoding |= 1 << index;
-                    c.iter().map(|t| -t).collect()
-                } else {
-                    c.to_vec()
-                };
-                index += 1;
-                out
-            })
-            .fold(
-                Vec::with_capacity(length as usize + encoder_trits_size),
-                |mut acc, mut v| {
-                    acc.append(&mut v);
-                    acc
-                },
-            )
-    };
-    trits.extend({
-        let mut out: Vec<Trit> = (0..triplet_count)
-            .into_iter()
-            .map(|i| {
-                let j = i * 3;
-                let val = ((encoding >> j) & ENCODER_MASK) as isize - TRITS_PER_TRYTE as isize;
-                let mut res = vec![0; 2];
-                num::int2trits(val, &mut res);
-                res
-            })
-            .fold(Vec::with_capacity(encoder_trits_size), |mut acc, mut v| {
-                acc.append(&mut v);
-                acc
-            });
-
-        let delta = out.capacity() - out.len();
-
-        if delta != 0 {
-            let mut add: Vec<Trit> = iter::repeat(0 as Trit).take(delta).collect();
-            out.append(&mut add);
+        for c in out[..number_of_flipped_trytes(input, length)].chunks_mut(TRITS_PER_TRYTE) {
+            if num::trits2int(c).is_positive() {
+                encoding |= 1 << index;
+                for t in c.iter_mut() {
+                    *t = -*t;
+                }
+            }
+            index += 1;
         }
-        out
-    });
-    trits
+        for (i, res) in out[length..
+                                length + trit_count(length / TRITS_PER_TRYTE) * TRITS_PER_PAIR]
+            .chunks_mut(TRITS_PER_PAIR)
+            .enumerate()
+        {
+            int2trits(
+                ((encoding >> (i * 3)) & ENCODER_MASK) as isize - TRITS_PER_TRYTE as isize,
+                res,
+            );
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use trytes::num;
-    use trytes::string::*;
+    //use trytes::num;
 
     #[test]
-    fn from_encoder_trytes() {
-        let num_trytes: Vec<Trit> = "ABXDEFG".chars().flat_map(char_to_trits).cloned().collect();
-        let num_val = num::trits2int(&num_trytes) as usize;
-        let length = encode(num_val);
-        let expect_trytes: Vec<Trit> = "ZYXWVUGIA"
-            .chars()
-            .flat_map(char_to_trits)
-            .cloned()
-            .collect();
-
-        assert_eq!(expect_trytes, length);
-        let (val, end) = decode(&length);
-        assert_eq!(val, num_val);
-        assert_eq!(end, expect_trytes.len());
+    fn encode_numbers() {
+        for i in 0..100000 {
+            //isize::max_value() / 2 {
+            let mut e: Vec<Trit> = vec![0; encoded_length(i)];
+            encode(i, &mut e);
+            //println!("i:{} - {:?}", i, e);
+            let d = decode(&e);
+            assert_eq!(i, d.0, "Output should match for {}", i);
+            assert_eq!(e.len(), d.1, "Length should match for {}", e.len());
+        }
     }
 }

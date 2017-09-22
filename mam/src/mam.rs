@@ -3,7 +3,6 @@ use alloc::*;
 use sign::iss;
 use merkle;
 use trytes::*;
-use tmath::*;
 use mask::*;
 use errors::*;
 use pascal;
@@ -13,33 +12,6 @@ const MESSAGE_NONCE_LENGTH: usize = HASH_LENGTH / 3;
 pub struct Message {
     pub next: [Trit; HASH_LENGTH],
     pub message: Vec<Trit>,
-}
-
-
-/// generate the message key for a root and an index.
-/// It copies `root` to `key`, and adds `index` to it.
-pub fn message_key<C: Curl<Trit>>(side_key: &[Trit], root: &[Trit], index: usize, curl: &mut C) {
-    curl.absorb(side_key);
-    let mut root_copy: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
-    root_copy.clone_from_slice(root);
-    add_assign(&mut root_copy, index as isize);
-    curl.absorb(&root_copy);
-}
-
-/// generates the address for a given mam `key`
-/// for a mam, the key should consist of the merkle root and
-/// an initialization vector, which is the index of the key  in the
-/// merkle tree being used
-pub fn message_id<T, C>(key: &mut [T], curl: &mut C)
-where
-    T: Copy + Clone + Sized,
-    C: Curl<T>,
-{
-    curl.absorb(&key[..HASH_LENGTH]);
-    key[..HASH_LENGTH].clone_from_slice(&curl.rate());
-    curl.reset();
-    curl.absorb(&key[..HASH_LENGTH]);
-    key[..HASH_LENGTH].clone_from_slice(&curl.rate());
 }
 
 /// Creates a signed, encrypted payload from a `message`,
@@ -74,17 +46,28 @@ where
 {
     // generate the key and the get the merkle tree hashes
     let message_length = next.len() + message.len();
-    let pascal_length = pascal::encoded_length(message_length);
+    let index_pascal_length = pascal::encoded_length(index as isize);
+    let pascal_length = pascal::encoded_length(message_length as isize);
     let signature_length = security as usize * iss::KEY_LENGTH;
     let branch_size = siblings.len() / HASH_LENGTH;
-    let siblings_pascal_length = pascal::encoded_length(branch_size);
+    let siblings_pascal_length = pascal::encoded_length(branch_size as isize);
     let branch_length = branch_size * HASH_LENGTH;
     let payload_min_length = pascal_length + message_length + MESSAGE_NONCE_LENGTH +
-        signature_length + siblings_pascal_length + branch_length;
+        signature_length + siblings_pascal_length + branch_length +
+        index_pascal_length;
     let mut key: Vec<Trit> = vec![0 as Trit; security as usize * iss::KEY_LENGTH];
-    message_key(side_key, &root, index, encr_curl);
     let mut payload: Vec<Trit> = Vec::with_capacity(payload_min_length);
-    payload.extend_from_slice(&pascal::encode(message_length));
+
+    encr_curl.absorb(side_key);
+    encr_curl.absorb(root);
+    payload.extend(vec![0; index_pascal_length]);
+    pascal::encode(index as isize, &mut payload[..index_pascal_length]);
+
+    payload.extend(vec![0; pascal_length]);
+    pascal::encode(
+        message_length as isize,
+        &mut payload[index_pascal_length..index_pascal_length + pascal_length],
+    );
     encr_curl.absorb(&payload);
     let mut cursor = payload.len();
     cursor = {
@@ -113,7 +96,12 @@ where
     curl.reset();
 
     payload.extend_from_slice(&key);
-    payload.extend_from_slice(&pascal::encode(branch_size));
+    let payload_signature_end = payload.len();
+    payload.extend(vec![0; siblings_pascal_length]);
+    pascal::encode(
+        branch_size as isize,
+        &mut payload[payload_signature_end..payload_signature_end + siblings_pascal_length],
+    );
     payload.extend_from_slice(&siblings);
     mask_slice(&mut payload[cursor..], encr_curl);
     encr_curl.reset();
@@ -129,49 +117,51 @@ pub fn parse<C>(
     payload: &[Trit],
     side_key: &[Trit],
     root: &[Trit],
-    index: usize,
-    sponge: &mut C,
+    curl: &mut C,
 ) -> Result<Message, MamError>
 where
     C: Curl<Trit>,
 {
     let mut hash: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
-    sponge.reset();
-    message_key(side_key, root, index, sponge);
+    curl.reset();
 
-    let (message_length, message_length_end) = pascal::decode(&payload);
-    if message_length > payload.len() {
+    let (index, index_end) = pascal::decode(&payload);
+    let (message_length, message_length_end) = pascal::decode(&payload[index_end..]);
+
+    curl.absorb(side_key);
+    curl.absorb(root);
+    if message_length as usize > payload.len() {
         return Err(MamError::ArrayOutOfBounds);
     }
-    sponge.absorb(&payload[..message_length_end]);
-    let mut out: Vec<Trit> = (&payload[message_length_end..payload.len()])
+    curl.absorb(&payload[..message_length_end + index_end]);
+    let mut out: Vec<Trit> = (&payload[index_end + message_length_end..payload.len()])
         .clone()
         .to_vec();
     let mut pos = {
-        unmask_slice(&mut out[..message_length], sponge);
-        message_length
+        unmask_slice(&mut out[..message_length as usize], curl);
+        message_length as usize
     };
-    unmask_slice(&mut out[pos..pos + HASH_LENGTH / 3], sponge);
+    unmask_slice(&mut out[pos..pos + HASH_LENGTH / 3], curl);
     pos += HASH_LENGTH / 3;
     let mut hmac: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
-    hmac.clone_from_slice(&sponge.rate());
+    hmac.clone_from_slice(&curl.rate());
     let security = iss::checksum_security(&hmac);
     let out_len = out.len();
-    unmask_slice(&mut out[pos..out_len], sponge);
-    hash.clone_from_slice(sponge.rate());
+    unmask_slice(&mut out[pos..out_len], curl);
+    hash.clone_from_slice(curl.rate());
     if security != 0 {
         let sig_end = pos + security * iss::KEY_LENGTH;
-        iss::digest_bundle_signature(&hmac, &mut out[pos..sig_end], sponge);
-        hash.clone_from_slice(&sponge.rate());
-        sponge.reset();
-        iss::address(&mut hash, sponge);
+        iss::digest_bundle_signature(&hmac, &mut out[pos..sig_end], curl);
+        hash.clone_from_slice(&curl.rate());
+        curl.reset();
+        iss::address(&mut hash, curl);
         pos = sig_end;
         let l = pascal::decode(&out[pos..]);
         pos += l.1;
-        let sib_end = pos + l.0 * HASH_LENGTH;
+        let sib_end = pos + l.0 as usize * HASH_LENGTH;
         let siblings = &out[pos..sib_end];
-        merkle::root(&hash, siblings, index, sponge);
-        hash.clone_from_slice(&sponge.rate());
+        merkle::root(&hash, siblings, index as usize, curl);
+        hash.clone_from_slice(&curl.rate());
         if hash.iter()
             .zip(root.iter())
             .take_while(|&(&a, &b)| a != b)
@@ -179,11 +169,12 @@ where
         {
             let mut out_message = Message {
                 next: [0; HASH_LENGTH],
-                message: Vec::with_capacity(message_length),
+                message: Vec::with_capacity(message_length as usize),
             };
             out_message.next.clone_from_slice(&out[..HASH_LENGTH]);
             out_message.message.extend_from_slice(
-                &out[HASH_LENGTH..message_length],
+                &out[HASH_LENGTH..
+                         message_length as usize],
             );
             Ok(out_message)
         } else {
@@ -223,7 +214,7 @@ mod tests {
         let count: usize = 4;
         let next_start = start + count as isize;
         let next_count = 2;
-        let index = 1;
+        let index = 0;
 
         let mut c1 = CpuCurl::<Trit>::default();
         let mut c2 = CpuCurl::<Trit>::default();
@@ -284,13 +275,14 @@ mod tests {
             merkle::MerkleTree::Node(_, hash, _) => root_trits.clone_from_slice(&hash),
             _ => {}
         }
-        match parse(&masked_payload, &side_key, &root_trits, index, &mut c1) {
+        match parse(&masked_payload, &side_key, &root_trits, &mut c1) {
             Ok(result) => assert_eq!(result.message, message),
             Err(e) => {
                 match e {
-                    MamError::InvalidSignature => assert!(false, "Invalid Signature"),
-                    MamError::InvalidHash => assert!(false, "Invalid Hash"),
-                    _ => assert!(false, "some other error!"),
+                    MamError::InvalidSignature => panic!("Invalid Signature"),
+                    MamError::InvalidHash => panic!("Invalid Hash"),
+                    MamError::ArrayOutOfBounds => panic!("Array Out of Bounds"),
+                    _ => panic!("Some error!"),
                 }
             }
         }

@@ -19,9 +19,11 @@ extern crate iota_sign;
 
 pub mod util;
 pub mod mam;
+pub mod merkle;
 
 #[cfg(any(target_os = "emscripten", target_arch = "wasm32"))]
-#[link_args = "-s EXPORTED_FUNCTIONS=['_mam_key','_mam_id','_mam_create','_mam_parse']"]
+#[link_args = "-s EXPORTED_FUNCTIONS=['_mam_key','_mam_id','_mam_create','_mam_parse','_merkle_create','_merkle_size','_merkle_depth','_merkle_count','_merkle_slice','_merkle_branch','_merkle_branch_len','_merkle_siblings','_merkle_root']"]
+
 extern "C" {}
 
 

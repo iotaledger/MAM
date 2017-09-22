@@ -12,39 +12,6 @@ use iota_curl::*;
 use util::c_str_to_static_slice;
 
 #[no_mangle]
-pub fn mam_key(c_key: *const c_char, c_root: *const c_char, index: usize) -> *const u8 {
-    let key_str = unsafe { c_str_to_static_slice(c_key) };
-    let root_str = unsafe { c_str_to_static_slice(c_root) };
-    let key: Vec<Trit> = key_str.chars().flat_map(char_to_trits).cloned().collect();
-    let root: Vec<Trit> = root_str.chars().flat_map(char_to_trits).cloned().collect();
-    let mut c1 = CpuCurl::<Trit>::default();
-    message_key(&key, &root, index, &mut c1);
-    let out_str = trits_to_string(&c1.state()).unwrap();
-    let pointer = out_str.as_ptr();
-    mem::forget(out_str);
-
-    pointer
-}
-
-#[no_mangle]
-pub fn mam_id(c_key: *const c_char, c_root: *const c_char, index: usize) -> *const u8 {
-    let key_str = unsafe { c_str_to_static_slice(c_key) };
-    let root_str = unsafe { c_str_to_static_slice(c_root) };
-    let key: Vec<Trit> = key_str.chars().flat_map(char_to_trits).cloned().collect();
-    let root: Vec<Trit> = root_str.chars().flat_map(char_to_trits).cloned().collect();
-    let mut c1 = CpuCurl::<Trit>::default();
-    message_key(&key, &root, index, &mut c1);
-    let mut out: Vec<Trit> = c1.rate().clone().to_vec();
-    c1.reset();
-    message_id(&mut out, &mut c1);
-    let out_str = trits_to_string(&out[..HASH_LENGTH]).unwrap();
-    let pointer = out_str.as_ptr();
-    mem::forget(out_str);
-
-    pointer
-}
-
-#[no_mangle]
 pub fn mam_create(
     c_seed: *const c_char,
     c_message: *const c_char,
@@ -117,7 +84,6 @@ pub fn mam_parse(
     c_payload: *const c_char,
     c_key: *const c_char,
     c_root: *const c_char,
-    index: usize,
 ) -> *const u8 {
 
     let payload: Vec<Trit> = {
@@ -138,7 +104,7 @@ pub fn mam_parse(
     let mut c1 = CpuCurl::<Trit>::default();
     //let mut c2 = CpuCurl::<Trit>::default();
 
-    match parse(&payload, &side_key, &root, index, &mut c1) {
+    match parse(&payload, &side_key, &root, &mut c1) {
         Ok(result) => {
             let mut out_str = trits_to_string(&result.message).unwrap();
             out_str.push('\n');
