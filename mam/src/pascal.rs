@@ -1,9 +1,7 @@
 use trytes::constants::*;
 use trytes::num;
 
-const ENCODER_MASK: isize = 7;
-const TRITS_PER_PAIR: usize = 2;
-const ZERO: [Trit; 5] = [1, 0, 0, -1, -1];
+const ZERO: [Trit; 4] = [1, 0, 0, -1];
 
 fn end(trits: &[Trit]) -> usize {
     if num::trits2int(&trits[..TRITS_PER_TRYTE]).is_positive() {
@@ -14,41 +12,27 @@ fn end(trits: &[Trit]) -> usize {
 }
 
 pub fn decode(input: &[Trit]) -> (isize, usize) {
-    if &input[..5] == &ZERO {
-        (0, 5)
+    if &input[..4] == &ZERO {
+        (0, 4)
     } else {
         let encoders_start = end(input);
-        let num_encoder_pairs = {
-            let num_negative_trytes = encoders_start / TRITS_PER_TRYTE;
-            num_negative_trytes / TRITS_PER_TRYTE +
-                if num_negative_trytes % TRITS_PER_TRYTE == 0 {
-                    0
-                } else {
-                    1
-                }
-        };
-        let mut i = 0;
+        let input_end = encoders_start +
+            pascal_min_trits(2usize.pow((encoders_start / TRITS_PER_TRYTE) as u32 - 1));
+        let encoder = num::trits2int(&input[encoders_start..input_end]);
         (
-            input[encoders_start..]
-                .chunks(TRITS_PER_PAIR)
-                .take(num_encoder_pairs)
-                .map(num::trits2int)
-                .zip(input[..encoders_start].chunks(9))
-                .fold(0, |acc, (e, trytes)| {
-                    let encoder = e + TRITS_PER_TRYTE as isize;
-                    trytes.chunks(TRITS_PER_TRYTE).fold(acc, |out, tryte| {
-                        let ret = out as isize +
-                            27isize.pow(i) * num::trits2int(tryte) *
-                                if ((encoder >> i) & 1isize) != 0isize {
-                                    -1
-                                } else {
-                                    1
-                                };
-                        i += 1;
-                        ret
-                    })
+            input[..encoders_start]
+                .chunks(TRITS_PER_TRYTE)
+                .enumerate()
+                .fold(0, |acc, (i, tryte)| {
+                    acc +
+                        27isize.pow(i as u32) *
+                            if ((encoder >> i) & 1isize) != 0isize {
+                                (-num::trits2int(tryte))
+                            } else {
+                                num::trits2int(tryte)
+                            }
                 }),
-            encoders_start + num_encoder_pairs * TRITS_PER_PAIR,
+            input_end,
         )
     }
 }
@@ -93,14 +77,6 @@ fn int2trits(input: isize, out: &mut [Trit]) -> usize {
     end
 }
 
-fn trit_count(length: usize) -> usize {
-    match length {
-        0 => 1,
-        _ => length / TRITS_PER_TRYTE + if length % TRITS_PER_TRYTE == 0 { 0 } else { 1 },
-    }
-
-}
-
 fn number_of_flipped_trytes(input: isize, length: usize) -> usize {
     (length -
          if input.is_negative() {
@@ -115,7 +91,7 @@ pub fn encoded_length(input: isize) -> usize {
         ZERO.len()
     } else {
         let length = num::round_third(pascal_min_trits(input.abs() as usize));
-        length + trit_count(length / TRITS_PER_TRYTE) * TRITS_PER_PAIR
+        length + pascal_min_trits(2usize.pow((length / TRITS_PER_TRYTE) as u32 - 1))
     }
 }
 
@@ -136,34 +112,28 @@ pub fn encode(input: isize, out: &mut [Trit]) {
             }
             index += 1;
         }
-        for (i, res) in out[length..
-                                length + trit_count(length / TRITS_PER_TRYTE) * TRITS_PER_PAIR]
-            .chunks_mut(TRITS_PER_PAIR)
-            .enumerate()
-        {
-            int2trits(
-                ((encoding >> (i * 3)) & ENCODER_MASK) as isize - TRITS_PER_TRYTE as isize,
-                res,
-            );
-        }
+        int2trits(encoding, &mut out[length..]);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    //use trytes::num;
 
+    fn test_encoding(i: isize) {
+        let mut e: Vec<Trit> = vec![0; encoded_length(i)];
+        encode(i, &mut e);
+        let d = decode(&e);
+        assert_eq!(e.len(), d.1, "Length should match for {}", e.len());
+        assert_eq!(i, d.0, "Output should match for {}, {:?}", i, e);
+    }
     #[test]
     fn encode_numbers() {
-        for i in 0..100000 {
-            //isize::max_value() / 2 {
-            let mut e: Vec<Trit> = vec![0; encoded_length(i)];
-            encode(i, &mut e);
-            //println!("i:{} - {:?}", i, e);
-            let d = decode(&e);
-            assert_eq!(i, d.0, "Output should match for {}", i);
-            assert_eq!(e.len(), d.1, "Length should match for {}", e.len());
+        for i in 0..1000 {
+            test_encoding(i);
+        }
+        for i in 10000000..10000100 {
+            test_encoding(i);
         }
     }
 }
