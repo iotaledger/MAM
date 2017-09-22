@@ -15,15 +15,17 @@ pub struct Message {
 }
 
 /// Creates a signed, encrypted payload from a `message`,
-/// a `side_key`, which is used for encryption,
-/// a merkle `root` which used as an initialization vector for the encryption,
-/// the `next` merkle root which is copied to the message,
-/// the `start` index of the current merkle tree,
-/// the `index` relative to the tree of the key being used for signing,
-/// the `security` parameter, giving the size of the signature,
-/// a `curl` instance of Trit Curl for use in finding the hamming nonce and signing,
-/// a `encr_curl` instance of Trit Curl for use in encrypting the payload,
-/// and a `bcurl` instance of binary coded trits Curl for use in finding the hamming nonce
+///
+/// * a `side_key`, which is used for encryption,
+/// * a merkle `root` which used as an initialization vector for the encryption,
+/// * the `next` merkle root which is copied to the message,
+/// * the `start` index of the current merkle tree,
+/// * the `index` relative to the tree of the key being used for signing,
+/// * the `security` parameter, giving the size of the signature,
+/// * a `curl` instance of Trit Curl for use in finding the hamming nonce and signing,
+/// * a `encr_curl` instance of Trit Curl for use in encrypting the payload,
+/// * a `bcurl` instance of binary coded trits Curl for use in finding the hamming nonce
+///
 /// Returns the signed, encrypted `payload`
 pub fn create<C, CB, H>(
     seed: &[Trit],
@@ -109,9 +111,16 @@ where
 }
 
 /// Parses an encrypted `payload`, first decrypting it with a
-/// `side_key` and the `root` and `index` as an initialization vector,
-/// and then checks that the signature is valid and
-/// with sibling hashes in the payload resolves to the merkle `root`
+///
+///   * `side_key`
+///   * `root`
+///   * `index`
+///
+/// as initialization vector.
+///
+/// Then checks that the signature is valid and with sibling hashes in the payload
+/// resolves to the merkle `root`.
+/// 
 /// Returns the `message` contained therein if valid, or a MamError if invalid
 pub fn parse<C>(
     payload: &[Trit],

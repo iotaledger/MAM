@@ -5,14 +5,16 @@
 //! Masked Authenticated Messaging is a tool for creating private, signed
 //! message streams on the IOTA Tangle. They are located on the tangle from a
 //! unique identifier, the merkle root, or public key, of the signed message.
+//!
 //! This merkle root, along with the index of the signing key within it used in
 //! the message is used as the encryption initialization vector for
 //! the encryption key.
 //!
-//! The merkle root is used as the address for the message published to the tangle.
+//! The merkle root should be used as the address for the message published to the tangle.
 //!
-//! The payload is created takes the form of:
+//! The inner structure of the resulting payload takes the form of:
 //!
+//! ```
 //! [
 //!     Encoded Index,
 //!     Encoded Message Length,
@@ -24,6 +26,7 @@
 //!         Siblings
 //!     ]
 //! ]
+//! ```
 //!
 //! # Example
 //!
