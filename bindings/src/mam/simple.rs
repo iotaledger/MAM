@@ -48,7 +48,13 @@ pub fn iota_mam_create(
 }
 
 #[no_mangle]
-pub fn iota_mam_parse(payload: &CTrits, side_key: &CTrits, root: &CTrits) -> *const [*mut CTrits] {
+pub fn iota_mam_parse(payload: &CTrits, side_key: &CTrits, root: &CTrits) -> *mut [*mut CTrits; 2] {
+    println!(
+        "payload {:?} sk {:?} root {:?}",
+        payload.encoding,
+        side_key.encoding,
+        root.encoding
+    );
 
     let mut c1 = CpuCurl::<Trit>::default();
     let result = parse(
@@ -56,11 +62,12 @@ pub fn iota_mam_parse(payload: &CTrits, side_key: &CTrits, root: &CTrits) -> *co
         ctrits_slice_trits(side_key),
         ctrits_slice_trits(root),
         &mut c1,
-    ).ok().unwrap();
+    ).ok()
+        .unwrap();
 
     let message = Box::new(ctrits_from_trits(result.message));
     let next = Box::new(ctrits_from_trits(result.next.to_vec()));
+    let out = Box::new([Box::into_raw(message), Box::into_raw(next)]);
 
-    let out = vec![Box::into_raw(message), Box::into_raw(next)].into_boxed_slice();
     Box::into_raw(out)
 }
