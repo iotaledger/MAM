@@ -119,6 +119,7 @@ pub fn encode(input: isize, out: &mut [Trit]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::Vec;
 
     fn test_encoding(i: isize) {
         let mut e: Vec<Trit> = vec![0; encoded_length(i)];

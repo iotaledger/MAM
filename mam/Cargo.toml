@@ -7,9 +7,6 @@ keywords = ["no_std"]
 [dependencies.iota-merkle]
 git = "https://github.com/iotaledger/iota.rs"
 
-[dependencies.iota-curl-cpu]
-git = "https://github.com/iotaledger/iota.rs"
-
 [dependencies.iota-curl]
 git = "https://github.com/iotaledger/iota.rs"
 
@@ -25,6 +22,10 @@ git = "https://github.com/iotaledger/iota.rs"
 [dev-dependencies.iota-trytes]
 git = "https://github.com/iotaledger/iota.rs"
 features = ["alloc"]
+
+[dev-dependencies.iota-curl-cpu]
+git = "https://github.com/iotaledger/iota.rs"
+
 
 [features]
 default = [ ]

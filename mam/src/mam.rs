@@ -90,7 +90,7 @@ where
 
     iss::subseed(seed, start + index as isize, &mut key[..HASH_LENGTH], curl);
     curl.reset();
-    iss::key(&mut key, security, curl);
+    iss::key(&mut key, security as usize, curl);
     curl.reset();
     iss::signature(&encr_curl.rate(), &mut key, curl);
     curl.reset();
