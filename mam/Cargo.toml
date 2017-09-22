@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Paul D Handy <paul.d.handy@gmail.com>"]
 keywords = ["no_std"]
 
+[dependencies]
+iota-pascal = { path = "../pascal" }
+
 [dependencies.iota-merkle]
 git = "https://github.com/iotaledger/iota.rs"
 

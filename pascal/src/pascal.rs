@@ -17,7 +17,7 @@ pub fn decode(input: &[Trit]) -> (isize, usize) {
     } else {
         let encoders_start = end(input);
         let input_end = encoders_start +
-            pascal_min_trits(2usize.pow((encoders_start / TRITS_PER_TRYTE) as u32 - 1));
+            pascal_min_trits(2usize.pow((encoders_start / TRITS_PER_TRYTE) as u32) - 1);
         let encoder = num::trits2int(&input[encoders_start..input_end]);
         (
             input[..encoders_start]
@@ -49,13 +49,13 @@ fn pascal_min_trits(input: usize) -> usize {
     min_trits_helper(input, 1)
 }
 
-fn write_trits(input: usize, out: &mut [Trit]) -> usize {
+fn write_trits(input: isize, out: &mut [Trit]) -> usize {
     match input {
         0 => 0,
         _ => {
-            let mut abs = input / RADIX as usize;
+            let mut abs = input / RADIX as isize;
             out[0] = {
-                let mut r = input as isize % RADIX as isize;
+                let mut r = input % RADIX as isize;
                 if r > 1 {
                     abs += 1;
                     r = -1;
@@ -68,7 +68,7 @@ fn write_trits(input: usize, out: &mut [Trit]) -> usize {
 }
 
 fn int2trits(input: isize, out: &mut [Trit]) -> usize {
-    let end = write_trits(input.abs() as usize, out);
+    let end = write_trits(input.abs(), out);
     if input.is_negative() {
         for t in out.iter_mut() {
             *t = -*t;
@@ -77,21 +77,12 @@ fn int2trits(input: isize, out: &mut [Trit]) -> usize {
     end
 }
 
-fn number_of_flipped_trytes(input: isize, length: usize) -> usize {
-    (length -
-         if input.is_negative() {
-             0
-         } else {
-             TRITS_PER_TRYTE
-         })
-}
-
 pub fn encoded_length(input: isize) -> usize {
     if input == 0 {
         ZERO.len()
     } else {
         let length = num::round_third(pascal_min_trits(input.abs() as usize));
-        length + pascal_min_trits(2usize.pow((length / TRITS_PER_TRYTE) as u32 - 1))
+        length + pascal_min_trits(2usize.pow((length / TRITS_PER_TRYTE) as u32) - 1)
     }
 }
 
@@ -103,7 +94,7 @@ pub fn encode(input: isize, out: &mut [Trit]) {
         let mut encoding = 0;
         int2trits(input, out);
         let mut index = 0;
-        for c in out[..number_of_flipped_trytes(input, length)].chunks_mut(TRITS_PER_TRYTE) {
+        for c in out[..length - TRITS_PER_TRYTE].chunks_mut(TRITS_PER_TRYTE) {
             if num::trits2int(c).is_positive() {
                 encoding |= 1 << index;
                 for t in c.iter_mut() {
@@ -111,6 +102,12 @@ pub fn encode(input: isize, out: &mut [Trit]) {
                 }
             }
             index += 1;
+        }
+        if num::trits2int(&out[length - TRITS_PER_TRYTE..length]).is_negative() {
+            encoding |= 1 << index;
+            for t in out[length - TRITS_PER_TRYTE..length].iter_mut() {
+                *t = -*t;
+            }
         }
         int2trits(encoding, &mut out[length..]);
     }
@@ -125,16 +122,22 @@ mod tests {
         let mut e: Vec<Trit> = vec![0; encoded_length(i)];
         encode(i, &mut e);
         let d = decode(&e);
-        assert_eq!(e.len(), d.1, "Length should match for {}", e.len());
         assert_eq!(i, d.0, "Output should match for {}, {:?}", i, e);
+        assert_eq!(e.len(), d.1, "Length should match for {}", e.len());
     }
     #[test]
     fn encode_numbers() {
+        for i in 0..1000 {
+            test_encoding(-i);
+        }
         for i in 0..1000 {
             test_encoding(i);
         }
         for i in 10000000..10000100 {
             test_encoding(i);
+        }
+        for i in 10000000..10000100 {
+            test_encoding(-i);
         }
     }
 }

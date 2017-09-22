@@ -106,11 +106,11 @@ extern crate iota_tmath as tmath;
 extern crate iota_curl as curl;
 extern crate iota_sign as sign;
 extern crate iota_merkle as merkle;
+extern crate iota_pascal as pascal;
 
 #[cfg(test)]
 extern crate iota_curl_cpu as curl_cpu;
 
-pub mod pascal;
 pub mod errors;
 pub mod mask;
 mod mam;

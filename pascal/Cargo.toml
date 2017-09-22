@@ -1,0 +1,11 @@
+[package]
+name = "iota-pascal"
+version = "0.1.0"
+authors = ["Paul D Handy <paul.d.handy@gmail.com>"]
+keywords = ["no_std"]
+
+[dependencies.iota-trytes]
+git = "https://github.com/iotaledger/iota.rs"
+
+[features]
+default = [ ]
