@@ -9,6 +9,19 @@ use iota_curl_cpu::*;
 use shared::ctrits::*;
 
 #[no_mangle]
+pub fn iota_mam_id(key: &CTrits, root: &CTrits) -> *const CTrits {
+    let mut c1 = CpuCurl::<Trit>::default();
+    let mut out: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+    iota_mam::id(
+        ctrits_slice_trits(key),
+        ctrits_slice_trits(root),
+        &mut out,
+        &mut c1,
+    );
+    Box::into_raw(Box::new(ctrits_from_trits(out.to_vec())))
+}
+
+#[no_mangle]
 pub fn iota_mam_create(
     seed: &CTrits,
     message: &CTrits,

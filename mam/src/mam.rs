@@ -9,6 +9,13 @@ use pascal;
 
 const MESSAGE_NONCE_LENGTH: usize = HASH_LENGTH / 3;
 
+pub fn id<C: Curl<Trit>>(side_key: &[Trit], root: &[Trit], out: &mut [Trit], c: &mut C) {
+    c.absorb(side_key);
+    c.absorb(root);
+    c.squeeze(out);
+    c.reset();
+}
+
 pub fn min_length(
     message_length: usize,
     siblings_length: usize,
