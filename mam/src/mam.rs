@@ -62,7 +62,7 @@ where
     H: HammingNonce<Trit>,
 {
     // generate the key and the get the merkle tree hashes
-    let message_length = next.len() + message.len();
+    let message_length = message.len();
 
     let index_p = pascal::encoded_length(index as isize);
     let message_p = pascal::encoded_length(message_length as isize);
@@ -71,13 +71,13 @@ where
     let siblings_count = (siblings.len() / HASH_LENGTH) as isize;
     let siblings_pascal_length = pascal::encoded_length(siblings_count);
     let signature_length = security as usize * iss::KEY_LENGTH;
-    let payload_min_length = message_p + message_length + MESSAGE_NONCE_LENGTH +
-        signature_length + siblings_pascal_length + siblings_length +
-        index_p;
+    let payload_min_length = message_p + HASH_LENGTH + message_length + MESSAGE_NONCE_LENGTH +
+        signature_length +
+        siblings_pascal_length + siblings_length + index_p;
 
     let next_root_start = index_p + message_p;
     let next_end = next_root_start + next.len();
-    let message_end = next_root_start + message_length;
+    let message_end = next_root_start + HASH_LENGTH + message_length;
     let nonce_end = message_end + MESSAGE_NONCE_LENGTH;
     let signature_end = nonce_end + signature_length;
     let siblings_pascal_end = signature_end + siblings_pascal_length;
@@ -167,7 +167,7 @@ where
         )
     };
     let message_start = next_root_start + HASH_LENGTH;
-    let message_end = next_root_start + message_length;
+    let message_end = message_start + message_length;
 
     curl.absorb(side_key);
     curl.absorb(root);
