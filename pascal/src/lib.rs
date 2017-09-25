@@ -1,7 +1,7 @@
 #![feature(alloc)]
 #![feature(const_fn)]
-//#![no_std]
-extern crate core;
+#![no_std]
+
 #[macro_use]
 extern crate alloc;
 
