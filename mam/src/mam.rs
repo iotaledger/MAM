@@ -192,13 +192,22 @@ where
         iss::digest_bundle_signature(&hmac, &mut payload[pos..sig_end], curl);
         hmac.clone_from_slice(&curl.rate());
         curl.reset();
-        iss::address(&mut hmac, curl);
         pos = sig_end;
         let l = pascal::decode(&payload[pos..]);
-        pos += l.1;
-        let sib_end = pos + l.0 as usize * HASH_LENGTH;
-        let siblings = &payload[pos..sib_end];
-        merkle::root(&hmac, siblings, index as usize, curl);
+        if l.0 == 0 {
+            curl.absorb(&hmac);
+        } else {
+            // get address lite
+            {
+                curl.absorb(&hmac);
+                hmac.clone_from_slice(curl.rate());
+            }
+            pos += l.1;
+            let sib_end = pos + l.0 as usize * HASH_LENGTH;
+            let siblings = &payload[pos..sib_end];
+            curl.reset();
+            merkle::root(&hmac, siblings, index as usize, curl);
+        };
         let res = if curl.rate() == root {
             Ok((next_root_start, message_end))
         } else {
@@ -217,6 +226,126 @@ mod tests {
     use super::*;
     use curl_cpu::*;
     use alloc::Vec;
+
+    #[test]
+    fn ham_fail() {
+        let seed: Vec<Trit> = "TX9XRR9SRCOBMTYDTMKNEIJCSZIMEUPWCNLC9DPDZKKAEMEFVSTEVUFTRUZXEHLULEIYJIEOWIC9STAHW"
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
+        let message: Vec<Trit> =
+            "D9999999JDLILILID9999999D9999999GC999999FB999999EA999999D9999999YELILILIGGOFQGHCMCOC9999WAFEA999UA999999JHTB9999VFLILILIFGOFQGHCCCOC9999ABFEA999UA999999WGSB9999SGLILILIEGOFQGHCTBOC99999BFEA999UA999999WGSB9999PHLILILIDGOFQGHCJBOC9999ZAFEA999VA999999WGSB9999N999X999D999H999L999P999T999F999H999D999"
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
+        let side_key: Vec<Trit> = "999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
+        let security: u8 = 1;
+        let start: isize = 0;
+        let count: usize = 1;
+        let next_start = start + count as isize;
+        let next_count = 1;
+
+        let mut c1 = CpuCurl::<Trit>::default();
+        let mut c2 = CpuCurl::<Trit>::default();
+        let mut c3 = CpuCurl::<Trit>::default();
+        let mut bc = CpuCurl::<BCTrit>::default();
+
+        let root = merkle::create(
+            &seed,
+            start,
+            count,
+            security as usize,
+            &mut c1,
+            &mut c2,
+            &mut c3,
+        );
+        let next_root = merkle::create(
+            &seed,
+            next_start,
+            next_count,
+            security as usize,
+            &mut c1,
+            &mut c2,
+            &mut c3,
+        );
+        let mut root_trits: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+        let mut next_root_trits: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
+
+        merkle::slice(&root, &mut root_trits);
+        merkle::slice(&next_root, &mut next_root_trits);
+
+        let index = 0;
+        let branch = merkle::branch(&root, index);
+        let branch_size = merkle::len(&branch);
+        let siblings_length = branch_size * HASH_LENGTH;
+
+        println!("bs {}", branch_size);
+        println!("sl {}", siblings_length);
+        println!("root {:?}", trits_to_string(&root_trits));
+
+
+        let mut siblings: Vec<Trit> = vec![0; siblings_length];
+
+        if siblings_length > 0 {
+            merkle::write_branch(&branch, siblings_length - HASH_LENGTH, &mut siblings);
+        }
+
+        let mut payload: Vec<Trit> =
+            vec![0; min_length(message.len(), siblings.len(), index, security as usize) + 1];
+
+        create::<CpuCurl<Trit>, CpuCurl<BCTrit>, CpuHam>(
+            &seed,
+            &message,
+            &side_key,
+            &root_trits,
+            &siblings,
+            &next_root_trits,
+            start,
+            index,
+            security,
+            &mut payload,
+            &mut c1,
+            &mut c2,
+            &mut bc,
+        );
+
+        let pstr = trits_to_string(&payload).unwrap();
+        println!("payload {:?}", trits_to_string(&payload));
+        c1.reset();
+
+        let mut payload : Vec<Trit>= pstr
+            .chars()
+            .flat_map(char_to_trits)
+            .cloned()
+            .collect();
+
+
+        match parse(&mut payload, &side_key, &root_trits, &mut c1) {
+            Ok((s, len)) => {
+                println!("msg {:?}", 
+                    trits_to_string(&payload[s + HASH_LENGTH..len]));
+                assert_eq!(
+                    trits_to_string(&payload[s + HASH_LENGTH..len]),
+                    trits_to_string(&message)
+                )
+            }
+            Err(e) => {
+                match e {
+                    MamError::InvalidSignature => panic!("Invalid Signature"),
+                    MamError::InvalidHash => panic!("Invalid Hash"),
+                    MamError::ArrayOutOfBounds => panic!("Array Out of Bounds"),
+                    _ => panic!("Some error!"),
+                }
+            }
+        }
+    }
+
     #[test]
     fn it_works() {
         let seed: Vec<Trit> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ9\
@@ -301,6 +430,8 @@ mod tests {
                 &mut c2,
                 &mut bc,
             );
+
+            c1.reset();
 
             match parse(&mut payload, &side_key, &root_trits, &mut c1) {
                 Ok((s, len)) => {
