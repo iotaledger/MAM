@@ -1,4 +1,6 @@
 use alloc::string::String;
+
+#[derive(Eq, PartialEq, Debug)]
 pub enum MamError {
     /// Message Hash did not have any hamming weight of zero
     InvalidHash,

@@ -1,5 +1,4 @@
 use curl::*;
-use alloc::*;
 use sign::iss;
 use merkle;
 use trytes::*;

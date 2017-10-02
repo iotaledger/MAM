@@ -46,7 +46,7 @@ pub fn iota_mam_create(
         siblings_trits.len(),
         index,
         security as usize,
-    ))
+    ) as i64) as usize
     ];
     iota_mam::create::<CpuCurl<Trit>, CpuCurl<BCTrit>, CpuHam>(
         ctrits_slice_trits(seed),

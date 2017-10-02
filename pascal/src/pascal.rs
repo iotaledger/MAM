@@ -18,18 +18,18 @@ pub fn decode(input: &[Trit]) -> (isize, usize) {
         let encoders_start = end(input);
         let input_end = encoders_start +
             pascal_min_trits(2usize.pow((encoders_start / TRITS_PER_TRYTE) as u32) - 1);
-        let encoder = num::trits2int(&input[encoders_start..input_end]);
+        let encoder = num::trits2int(&input[encoders_start..input_end]) as isize;
         (
             input[..encoders_start]
                 .chunks(TRITS_PER_TRYTE)
                 .enumerate()
                 .fold(0, |acc, (i, tryte)| {
                     acc +
-                        27isize.pow(i as u32) *
-                            if ((encoder >> i) & 1isize) != 0isize {
-                                (-num::trits2int(tryte))
+                        27_isize.pow(i as u32) *
+                            if ((encoder >> i) & 1_isize) != 0_isize {
+                                (-num::trits2int(tryte)) as isize
                             } else {
-                                num::trits2int(tryte)
+                                num::trits2int(tryte) as isize
                             }
                 }),
             input_end,
@@ -81,7 +81,7 @@ pub fn encoded_length(input: isize) -> usize {
     if input == 0 {
         ZERO.len()
     } else {
-        let length = num::round_third(pascal_min_trits(input.abs() as usize));
+        let length = num::round_third(pascal_min_trits(input.abs() as usize) as i64) as usize;
         length + pascal_min_trits(2usize.pow((length / TRITS_PER_TRYTE) as u32) - 1)
     }
 }
@@ -90,7 +90,7 @@ pub fn encode(input: isize, out: &mut [Trit]) {
     if input == 0 {
         out.clone_from_slice(&ZERO);
     } else {
-        let length = num::round_third(pascal_min_trits(input.abs() as usize));
+        let length = num::round_third(pascal_min_trits(input.abs() as usize) as i64) as usize;
         let mut encoding = 0;
         int2trits(input, out);
         let mut index = 0;
