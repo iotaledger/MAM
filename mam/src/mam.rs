@@ -194,20 +194,18 @@ where
         curl.reset();
         pos = sig_end;
         let l = pascal::decode(&payload[pos..]);
-        if l.0 == 0 {
-            curl.absorb(&hmac);
-        } else {
+
+        curl.absorb(&hmac);
+        if l.0 != 0 {
             // get address lite
-            {
-                curl.absorb(&hmac);
-                hmac.clone_from_slice(curl.rate());
-            }
+            hmac.clone_from_slice(curl.rate());
             pos += l.1;
             let sib_end = pos + l.0 as usize * HASH_LENGTH;
             let siblings = &payload[pos..sib_end];
             curl.reset();
             merkle::root(&hmac, siblings, index as usize, curl);
         };
+
         let res = if curl.rate() == root {
             Ok((next_root_start, message_end))
         } else {
@@ -228,7 +226,7 @@ mod tests {
     use alloc::Vec;
 
     #[test]
-    fn ham_fail() {
+    fn single_leaf_tree() {
         let seed: Vec<Trit> = "TX9XRR9SRCOBMTYDTMKNEIJCSZIMEUPWCNLC9DPDZKKAEMEFVSTEVUFTRUZXEHLULEIYJIEOWIC9STAHW"
             .chars()
             .flat_map(char_to_trits)
@@ -285,11 +283,6 @@ mod tests {
         let branch_size = merkle::len(&branch);
         let siblings_length = branch_size * HASH_LENGTH;
 
-        println!("bs {}", branch_size);
-        println!("sl {}", siblings_length);
-        println!("root {:?}", trits_to_string(&root_trits));
-
-
         let mut siblings: Vec<Trit> = vec![0; siblings_length];
 
         if siblings_length > 0 {
@@ -316,7 +309,6 @@ mod tests {
         );
 
         let pstr = trits_to_string(&payload).unwrap();
-        println!("payload {:?}", trits_to_string(&payload));
         c1.reset();
 
         let mut payload : Vec<Trit>= pstr
@@ -328,8 +320,6 @@ mod tests {
 
         match parse(&mut payload, &side_key, &root_trits, &mut c1) {
             Ok((s, len)) => {
-                println!("msg {:?}", 
-                    trits_to_string(&payload[s + HASH_LENGTH..len]));
                 assert_eq!(
                     trits_to_string(&payload[s + HASH_LENGTH..len]),
                     trits_to_string(&message)
