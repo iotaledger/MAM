@@ -37,7 +37,7 @@ It is suggested to use rust nightly. To build the project for release (optimized
 cargo build --all --release
 ```
 
-To build javascript (asm or wasm), follow instructions from [here](http://www.hellorust.com/emscripten/), and then
+To build javascript (asm or wasm), follow instructions from [here](https://www.hellorust.com/setup/emscripten/), and then
 
 ```
 cd bindings
