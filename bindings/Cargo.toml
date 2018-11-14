@@ -1,12 +1,11 @@
 [package]
 name = "iota-mam-bindings"
 version = "0.1.0"
-authors = ["Paul D Handy <paul.d.handy@gmail.com>"]
+authors = ["Andreas C. Osowski <andreas@osowski.de>", "Paul D Handy <paul.d.handy@gmail.com>"]
 keywords = ["no_std"]
 
 [lib]
 path = "src/lib.rs"
-crate-type = ["rlib"]
 
 [features]
 default = []
