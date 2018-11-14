@@ -1,6 +1,5 @@
 use alloc::boxed::Box;
-
-use alloc::Vec;
+use alloc::vec::Vec;
 
 use iota_trytes::*;
 use iota_mam;
