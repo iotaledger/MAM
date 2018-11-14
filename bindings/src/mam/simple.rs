@@ -8,7 +8,7 @@ use iota_curl_cpu::*;
 use shared::ctrits::*;
 
 #[no_mangle]
-pub fn iota_mam_id(key: &CTrits, root: &CTrits) -> *const CTrits {
+pub extern "C" fn iota_mam_id(key: &CTrits, root: &CTrits) -> *const CTrits {
     let mut c1 = CpuCurl::<Trit>::default();
     let mut out: [Trit; HASH_LENGTH] = [0; HASH_LENGTH];
     iota_mam::id(
@@ -21,7 +21,7 @@ pub fn iota_mam_id(key: &CTrits, root: &CTrits) -> *const CTrits {
 }
 
 #[no_mangle]
-pub fn iota_mam_create(
+pub extern "C" fn iota_mam_create(
     seed: &CTrits,
     message: &CTrits,
     key: &CTrits,
@@ -67,7 +67,7 @@ pub fn iota_mam_create(
 }
 
 #[no_mangle]
-pub fn iota_mam_parse(
+pub extern "C" fn iota_mam_parse(
     payload: &mut CTrits,
     side_key: &CTrits,
     root: &CTrits,
