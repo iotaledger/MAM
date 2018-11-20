@@ -31,7 +31,8 @@ More will come in time.
 
 ## build
 
-It is suggested to use rust nightly. To build the project for release (optimized), run
+You have to compile this library using [rust nightly](https://doc.rust-lang.org/1.13.0/book/nightly-rust.html).
+To build the project for release (optimized), run
 
 ```
 cargo build --all --release
